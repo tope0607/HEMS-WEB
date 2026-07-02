@@ -1,0 +1,21 @@
+# deps / build
+node_modules/
+web/dist/
+dist/
+
+# secrets & local env
+.env
+.env.local
+serviceAccountKey.json
+
+# firebase emulator artifacts
+*-debug.log
+firebase-debug.log
+.firebase/
+firestore-debug.log
+database-debug.log
+ui-debug.log
+emulator-data/
+
+# OS / editor
+.DS_Store

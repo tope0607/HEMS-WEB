@@ -1,0 +1,20 @@
+{
+  "name": "hems-root",
+  "private": true,
+  "type": "module",
+  "description": "HEMS Firebase scaffolding: rules, seed, rules tests. Web app lives in web/, firmware in firmware/.",
+  "scripts": {
+    "emulators": "firebase emulators:start --project demo-hems",
+    "seed": "node scripts/seed.mjs",
+    "seed:emulator": "node scripts/seed.mjs --emulator",
+    "test:rules": "firebase emulators:exec --only auth,firestore,database --project demo-hems \"node --test tests/rules.test.mjs\"",
+    "deploy:rules": "firebase deploy --only database,firestore",
+    "deploy:hosting": "npm --prefix web run build && firebase deploy --only hosting"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^11.10.0",
+    "firebase-admin": "^13.4.0",
+    "firebase-tools": "^14.9.0"
+  }
+}

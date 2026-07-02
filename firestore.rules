@@ -1,0 +1,56 @@
+rules_version = '2';
+
+// HEMS Firestore rules.
+//
+// Roles are carried as a custom claim on the Firebase Auth ID token
+// (`role: "admin" | "user" | "device"`), set exclusively by the Admin SDK
+// (scripts/seed.mjs or the Firebase console/CLI). Clients can never write
+// their own role: the `users/{uid}` documents are readable mirrors for the
+// UI, but they are not writable from any client at all.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Missing claim resolves to '' instead of raising.
+    function role() {
+      return signedIn() ? request.auth.token.get('role', '') : '';
+    }
+
+    // Downsampled telemetry, written only by the ESP32's device account.
+    // Append-only: history is evidence; nobody edits or deletes it from a client.
+    match /history/{docId} {
+      allow read: if signedIn();
+      allow create: if role() == 'device'
+                    && request.resource.data.ts is int
+                    && request.resource.data.avgPowerW is number;
+      allow update, delete: if false;
+    }
+
+    // NILM appliance events + high-load alerts. Same posture as history.
+    match /events/{docId} {
+      allow read: if signedIn();
+      allow create: if role() == 'device'
+                    && request.resource.data.ts is int
+                    && request.resource.data.type in ['appliance', 'high_load'];
+      allow update, delete: if false;
+    }
+
+    // Role mirror per account. A user may read their own doc (the app uses it
+    // to route by role); admins may read all. NO client write path exists —
+    // roles are set only via the Admin SDK / console, which bypasses rules.
+    // This is what makes privilege escalation impossible from the client.
+    match /users/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || role() == 'admin');
+      allow list: if role() == 'admin';
+      allow create, update, delete: if false;
+    }
+
+    // Default deny for anything not matched above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
