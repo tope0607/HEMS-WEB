@@ -279,7 +279,8 @@
 
 .card {
   background: var(--surface);
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--card-shadow);
   border-radius: var(--r-card);
   padding: var(--pad-card);
   min-width: 0;
@@ -292,6 +293,7 @@
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
+  min-height: 26px; /* card tops align across a row even without a right pill */
 }
 
 .card-head .mono-label {
@@ -383,19 +385,21 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
 }
 
 .gauge-center {
   text-align: center;
-  margin-top: -54px;
+  margin-top: -58px;
 }
 
 .gauge-legend {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   width: 100%;
-  margin-top: 10px;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
 }
 
 /* ── phase bars ────────────────────────────────────────────────────────── */
@@ -428,7 +432,8 @@
   font-family: var(--font-mono);
   font-weight: 500;
   font-size: 12px;
-  width: 26px;
+  width: 22px;
+  flex: none;
   color: var(--ink-2);
 }
 
@@ -439,11 +444,30 @@
   flex: none;
 }
 
+.phase-sub {
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* fixed columns so the % and W values align down the card */
 .phase-meta {
   margin-left: auto;
   display: flex;
   gap: 14px;
   align-items: baseline;
+  flex: none;
+}
+
+.phase-pct {
+  width: 36px;
+  text-align: right;
+}
+
+.phase-watts {
+  min-width: 64px;
+  text-align: right;
 }
 
 /* dot-leader rows (image 9) */
@@ -605,14 +629,25 @@
   gap: 10px;
 }
 
+.tl-main {
+  flex: 1;
+  min-width: 0;
+}
+
 .tl-what {
   font-weight: 550;
   font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tl-sub {
   color: var(--ink-3);
   font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tl-time {
@@ -999,12 +1034,13 @@
   color: var(--ink-3);
 }
 
-/* donut (thin stroke, centre total) */
+/* donut (design_taste_2 fig 1): thick vivid rounded segments, outer tick
+   ring, centre total, tiled legend rows */
 .donut-wrap {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 22px;
-  flex-wrap: wrap;
+  gap: 18px;
 }
 
 .donut-center-label {
@@ -1014,8 +1050,30 @@
 }
 
 .donut-rows {
-  flex: 1;
-  min-width: 180px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+.donut-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 9px 12px;
+}
+
+.donut-tick {
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.donut-row .mono-value {
+  font-variant-numeric: tabular-nums;
 }
 
 /* footer note */

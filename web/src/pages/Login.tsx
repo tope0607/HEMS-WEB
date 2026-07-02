@@ -48,6 +48,12 @@ export function LoginPage() {
         </div>
 
         <div>
+          <div
+            className="mono-label"
+            style={{ letterSpacing: '0.24em', marginBottom: 12, color: 'var(--ink-2)', fontSize: 12 }}
+          >
+            Mechatronics Engineering Department
+          </div>
           {/* the single blackletter accent, used once (image 8) */}
           <div className="login-wordmark">Hems.</div>
           <p style={{ color: 'var(--ink-2)', maxWidth: 380, marginTop: 14, fontSize: 14.5 }}>

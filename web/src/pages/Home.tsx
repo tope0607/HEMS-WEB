@@ -137,7 +137,7 @@ export function HomePage() {
       </section>
 
       {/* 5 — daily energy + cost */}
-      <section className="card col-4" aria-label="Energy today">
+      <section className="card col-3" aria-label="Energy today">
         <div className="card-head">
           <span className="mono-label">Energy today</span>
         </div>
@@ -168,7 +168,7 @@ export function HomePage() {
       </section>
 
       {/* 6 — appliance activity */}
-      <section className="card col-3" aria-label="Appliance activity">
+      <section className="card col-4" aria-label="Appliance activity">
         <div className="card-head">
           <span className="mono-label">Appliance</span>
         </div>
@@ -188,8 +188,12 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* 4 — power history */}
-      <section className="card col-8 chart-card" aria-label="Power history">
+      {/* 4 — power history: full width for users; admins get the contactor
+             card in a right rail beside it */}
+      <section
+        className={`card ${user?.role === 'admin' ? 'col-8' : 'col-12'} chart-card`}
+        aria-label="Power history"
+      >
         <div className="card-head">
           <span className="mono-label">Power history</span>
           <RangeSelector value={range} onChange={setRange} />
@@ -203,18 +207,10 @@ export function HomePage() {
         )}
       </section>
 
-      {/* admin only — 4 col right rail */}
-      {user?.role === 'admin' ? (
+      {user?.role === 'admin' && (
         <div className="col-4" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
           <ContactorCard live={live} control={control} onRequest={requestContactor} />
         </div>
-      ) : (
-        <section className="card col-4" aria-label="Recent activity">
-          <div className="card-head">
-            <span className="mono-label">Recent activity</span>
-          </div>
-          <EventTimeline events={events.slice(0, 6)} now={live.lastUpdate} />
-        </section>
       )}
     </div>
   );

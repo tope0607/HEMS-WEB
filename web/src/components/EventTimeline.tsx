@@ -25,9 +25,9 @@ export function EventTimeline({ events, now }: { events: EventItem[]; now: numbe
         <li className="tl-item" key={e.id}>
           <span className="tl-dot" style={{ background: dotColor(e) }} />
           <div className="tl-body">
-            <div style={{ minWidth: 0 }}>
+            <div className="tl-main">
               <div className="tl-what">{describe(e)}</div>
-              <div className="tl-sub">{detail(e)}</div>
+              <div className="tl-sub" title={detail(e)}>{detail(e)}</div>
             </div>
             <span className="tl-time mono-value" title={new Date(e.ts).toLocaleString()}>
               {now - e.ts < 60 * 60_000 ? fmtRelative(e.ts, now) : fmtClock(e.ts)}

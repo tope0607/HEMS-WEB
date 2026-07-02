@@ -9,61 +9,97 @@ interface DonutProps {
 
 const COLORS = ['var(--chart-l1)', 'var(--chart-l2)', 'var(--chart-l3)'];
 const LABELS = ['L1', 'L2', 'L3'];
-const R = 56;
-const STROKE = 12; // thin-stroke donut (images 2, 9)
-const C = 2 * Math.PI * R;
-const GAP = 5; // px gap between slices on the circumference
 
-/** Thin-stroke donut with centre total. */
+const SIZE = 210;
+const CX = SIZE / 2;
+const R = 66; // segment ring
+const STROKE = 21; // thick, vivid ring (design_taste_2 fig 1)
+const TICK_R = 89; // outer decorative tick ring
+const C = 2 * Math.PI * R;
+const GAP = 10; // px gap between segments on the circumference
+
+/** Thick rounded-segment donut with an outer tick ring and centre total. */
 export function Donut({ values, totalLabel, totalValue }: DonutProps) {
   const total = values.reduce((a, b) => a + b, 0);
   let offset = C * 0.25; // start at 12 o'clock
 
   return (
     <div className="donut-wrap">
-      <svg width={148} height={148} viewBox="0 0 148 148" role="img" aria-label={`${totalLabel}: ${LABELS.map((l, i) => `${l} ${fmtKwh(values[i])}`).join(', ')} kWh`}>
+      <svg
+        width={SIZE}
+        height={SIZE}
+        viewBox={`0 0 ${SIZE} ${SIZE}`}
+        role="img"
+        aria-label={`${totalLabel}: ${LABELS.map((l, i) => `${l} ${fmtKwh(values[i])}`).join(', ')} kWh`}
+      >
+        {/* outer tick ring — instrument-panel detail */}
+        <circle
+          cx={CX}
+          cy={CX}
+          r={TICK_R}
+          fill="none"
+          stroke="var(--hairline-strong)"
+          strokeWidth={7}
+          strokeDasharray="1.6 6.2"
+        />
+        {/* track so tiny slices still read as part of a whole */}
+        <circle cx={CX} cy={CX} r={R} fill="none" stroke="var(--surface-2)" strokeWidth={STROKE} />
         {total > 0 &&
           values.map((v, i) => {
             const len = Math.max(0, (v / total) * C - GAP);
-            const el = (
-              <circle
-                key={i}
-                cx={74}
-                cy={74}
-                r={R}
-                fill="none"
-                stroke={COLORS[i]}
-                strokeWidth={STROKE}
-                strokeLinecap="round"
-                strokeDasharray={`${len} ${C - len}`}
-                strokeDashoffset={offset}
-              />
-            );
+            const el =
+              len > 0.5 ? (
+                <circle
+                  key={i}
+                  cx={CX}
+                  cy={CX}
+                  r={R}
+                  fill="none"
+                  stroke={COLORS[i]}
+                  strokeWidth={STROKE}
+                  strokeLinecap="round"
+                  strokeDasharray={`${len} ${C - len}`}
+                  strokeDashoffset={offset - GAP / 2}
+                />
+              ) : null;
             offset -= (v / total) * C;
             return el;
           })}
-        <text x={74} y={69} className="donut-center-label" style={{ fill: 'var(--ink)', fontSize: 22 }}>
+        <text
+          x={CX}
+          y={CX - 4}
+          className="donut-center-label"
+          dominantBaseline="middle"
+          style={{ fill: 'var(--ink)', fontSize: 27 }}
+        >
           {fmtKwh(totalValue)}
         </text>
         <text
-          x={74}
-          y={88}
+          x={CX}
+          y={CX + 19}
           textAnchor="middle"
-          style={{ fill: 'var(--ink-3)', fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.1em' }}
+          dominantBaseline="middle"
+          style={{
+            fill: 'var(--ink-3)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.12em',
+          }}
         >
           {totalLabel}
         </text>
       </svg>
+
       <div className="donut-rows">
         {values.map((v, i) => (
-          <div className="phase-row" key={i} style={i === 0 ? { borderTop: 'none' } : undefined}>
-            <span className="phase-swatch" style={{ background: COLORS[i] }} />
-            <span className="phase-tag">{LABELS[i]}</span>
+          <div className="donut-row" key={i}>
+            <span className="donut-tick" style={{ background: COLORS[i] }} />
+            <span className="phase-tag" style={{ width: 'auto' }}>{LABELS[i]}</span>
             <span className="leader" />
             <span className="mono-value" style={{ color: 'var(--ink)' }}>
               {fmtKwh(v)} kWh
             </span>
-            <span className="mono-value" style={{ color: 'var(--ink-3)', width: 38, textAlign: 'right' }}>
+            <span className="mono-value phase-pct" style={{ color: 'var(--ink-3)' }}>
               {total > 0 ? Math.round((v / total) * 100) : 0}%
             </span>
           </div>

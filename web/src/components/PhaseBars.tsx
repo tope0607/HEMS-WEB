@@ -35,13 +35,13 @@ export function PhaseBars({ live }: { live: LiveData }) {
           <div key={k} className="phase-row">
             <span className="phase-swatch" style={{ background: PHASE_VAR[k] }} />
             <span className="phase-tag">{k}</span>
-            <span className="mono-value" style={{ color: 'var(--ink-3)' }}>
+            <span className="mono-value phase-sub" style={{ color: 'var(--ink-3)' }}>
               {ph.v.toFixed(1)}V · PF {ph.pf.toFixed(2)}
             </span>
             <span className="leader" />
             <span className="phase-meta">
-              <span className="mono-value" style={{ color: 'var(--ink-3)' }}>{share}%</span>
-              <span className="mono-value" style={{ color: 'var(--ink)' }}>{fmtInt(ph.p)} W</span>
+              <span className="mono-value phase-pct" style={{ color: 'var(--ink-3)' }}>{share}%</span>
+              <span className="mono-value phase-watts" style={{ color: 'var(--ink)' }}>{fmtInt(ph.p)} W</span>
             </span>
           </div>
         );
