@@ -1,0 +1,122 @@
+/* ────────────────────────────────────────────────────────────────────────────
+   HEMS design tokens — derived from Design_taste.docx
+   Dark (images 3, 6, 7): near-black canvas, dotted grid, raised surfaces,
+   hairline borders, oversized numerals in RECEDING dark grey.
+   Light (images 2, 4, 5, 9): warm grey canvas, white cards r18–20, hairline
+   border (no shadow stacking), numerals in light grey.
+   Accents are small pops only — never large fills.
+   ──────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* type */
+  --font-ui: 'Inter Variable', system-ui, -apple-system, sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, 'SF Mono', monospace;
+  --font-blackletter: 'UnifrakturMaguntia', serif; /* the one editorial accent */
+
+  /* brand accents — identical in both themes (small pops only) */
+  --blue: #2e7df7;
+  --green: #22c55e;
+  --amber: #f5b301;
+  --red: #ef4444;
+  --magenta: #c026d3; /* live accent, rare */
+
+  /* geometry */
+  --r-card: 18px;
+  --r-control: 12px;
+  --r-pill: 999px;
+  --pad-card: 20px;
+  --gap: 16px;
+
+  --dur: 220ms;
+  --ease: cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
+
+  --canvas: #0b0b0c;
+  --canvas-dot: rgba(255, 255, 255, 0.055);
+  --surface: #141416;
+  --surface-2: #1a1a1d; /* raised: tooltips, inputs, segmented controls */
+  --surface-3: #232327;
+  --hairline: rgba(255, 255, 255, 0.06);
+  --hairline-strong: rgba(255, 255, 255, 0.12);
+
+  --ink: #f2f2f3;
+  --ink-2: #9b9ba1;
+  --ink-3: #62626a;
+  --numeral: #45454d; /* oversized numerals recede into the canvas */
+
+  /* chart marks — validated against #141416 (OKLCH band + CVD + contrast) */
+  --chart-l1: #4d8df7;
+  --chart-l2: #1fae55;
+  --chart-l3: #c08a00;
+  --chart-line: #4d8df7;
+  --chart-grid: rgba(255, 255, 255, 0.05);
+
+  /* status tints (pill backgrounds) + readable foregrounds */
+  --tint-green-bg: rgba(34, 197, 94, 0.13);
+  --tint-green-fg: #4ade80;
+  --tint-amber-bg: rgba(245, 179, 1, 0.13);
+  --tint-amber-fg: #fbc93d;
+  --tint-red-bg: rgba(239, 68, 68, 0.13);
+  --tint-red-fg: #f87171;
+  --tint-blue-bg: rgba(46, 125, 247, 0.14);
+  --tint-blue-fg: #7cabf9;
+  --tint-magenta-bg: rgba(192, 38, 211, 0.14);
+  --tint-magenta-fg: #e26bef;
+  --tint-neutral-bg: rgba(255, 255, 255, 0.06);
+  --tint-neutral-fg: #9b9ba1;
+
+  --tooltip-bg: #1e1e22;
+  --tooltip-ink: #f2f2f3;
+  --tooltip-ink-2: #8f8f96;
+
+  --focus-ring: rgba(46, 125, 247, 0.5);
+  --scrim: rgba(0, 0, 0, 0.6);
+}
+
+html[data-theme='light'] {
+  color-scheme: light;
+
+  --canvas: #e9e9ec;
+  --canvas-dot: rgba(20, 20, 25, 0.07);
+  --surface: #ffffff;
+  --surface-2: #f4f4f6;
+  --surface-3: #ececef;
+  --hairline: rgba(20, 20, 25, 0.08);
+  --hairline-strong: rgba(20, 20, 25, 0.16);
+
+  --ink: #17171a;
+  --ink-2: #5f5f66;
+  --ink-3: #a2a2aa;
+  --numeral: #c7c7cc;
+
+  /* chart marks — validated against #ffffff */
+  --chart-l1: #2467d6;
+  --chart-l2: #178a43;
+  --chart-l3: #b36a00;
+  --chart-line: #2467d6;
+  --chart-grid: rgba(20, 20, 25, 0.06);
+
+  --tint-green-bg: #e5f6ec;
+  --tint-green-fg: #157f3d;
+  --tint-amber-bg: #fbf1d4;
+  --tint-amber-fg: #8a6400;
+  --tint-red-bg: #fde8e8;
+  --tint-red-fg: #c22727;
+  --tint-blue-bg: #e6effe;
+  --tint-blue-fg: #1d5fc9;
+  --tint-magenta-bg: #f9e6fb;
+  --tint-magenta-fg: #a21caf;
+  --tint-neutral-bg: rgba(20, 20, 25, 0.05);
+  --tint-neutral-fg: #5f5f66;
+
+  /* tooltip stays dark in light mode — image 9's signature move */
+  --tooltip-bg: #1e1e22;
+  --tooltip-ink: #f2f2f3;
+  --tooltip-ink-2: #8f8f96;
+
+  --focus-ring: rgba(46, 125, 247, 0.45);
+  --scrim: rgba(20, 20, 25, 0.35);
+}
