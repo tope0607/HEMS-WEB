@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useLive } from '../lib/useLive';
 import { getDataSource } from '../lib/dataSource';
-import type { EventItem, HistoryPoint, RangeKey } from '../lib/types';
+import { isDeviceLive, type EventItem, type HistoryPoint, type RangeKey } from '../lib/types';
 import { CAPACITY_W, TARIFF_NAIRA_PER_KWH } from '../lib/config';
 import { fmtInt, fmtKwh } from '../lib/format';
 import { Sparkline } from '../components/Sparkline';
@@ -88,7 +88,7 @@ export function HomePage() {
         <div className="card-head">
           <span className="mono-label">
             Live power
-            {live.deviceOnline && (
+            {isDeviceLive(live) && (
               <span
                 className="pill-dot pill-dot--pulse"
                 style={{ background: 'var(--magenta)', width: 6, height: 6 }}

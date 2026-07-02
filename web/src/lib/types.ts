@@ -55,6 +55,15 @@ export const RANGE_MS: Record<RangeKey, number> = {
   '7d': 7 * 24 * 60 * 60 * 1000,
 };
 
+/** Time after which /live is considered stale even if deviceOnline reads true.
+ *  The ESP32 client library speaks REST/SSE, where RTDB's server-side
+ *  onDisconnect() isn't available — staleness is the reliable offline signal. */
+export const DEVICE_STALE_MS = 20_000;
+
+export function isDeviceLive(live: LiveData | null, now = Date.now()): boolean {
+  return !!live && live.deviceOnline && now - live.lastUpdate < DEVICE_STALE_MS;
+}
+
 export interface SessionUser {
   uid: string;
   email: string;

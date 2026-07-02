@@ -1,0 +1,140 @@
+# HEMS ESP32 Firmware Guide
+
+Sketch: `firmware/hems_esp32/hems_esp32.ino` + `config.h`. Target hardware is
+an **ESP32-WROOM-32UE** (4 MB flash, no PSRAM). All processing happens on this
+one chip — there is no other computer in the system.
+
+## 1 · Board setup (Arduino IDE)
+
+1. Arduino IDE ≥ 2.x → *Settings → Additional boards manager URLs*:
+   `https://espressif.github.io/arduino-esp32/package_esp32_index.json`
+2. Boards Manager → install **esp32 by Espressif Systems** (core **3.x**).
+3. Select board **ESP32 Dev Module**, and set:
+   - Flash Size: 4MB · Partition Scheme: **Default 4MB with spiffs**
+   - CPU Frequency: 240 MHz · Upload speed 921600 (drop to 115200 if flaky)
+
+## 2 · Libraries (Library Manager unless noted)
+
+| Library | Author | Tested-against version | Purpose |
+|---|---|---|---|
+| **FirebaseClient** | Mobizt | ≥ 1.4.x | Auth, RTDB (SSE stream), Firestore |
+| **PZEM004Tv30** | Jakub Mandula | ≥ 1.1.2 | PZEM-004T v3.0 Modbus reads |
+| **EspSoftwareSerial** | Dirk Kaar | ≥ 8.1 | 3rd PZEM port |
+| **hems_nilm_cpp** | (this project) | from the NILM-port task | appliance detection |
+
+`hems_nilm_cpp` is a **local library**: copy its folder into
+`~/Arduino/libraries/hems_nilm_cpp/` so `#include <hems_nilm.h>` resolves.
+It is produced by the separate NILM C++ port task **together with its parity
+test** — if you don't have it yet, finish that task first. The sketch
+deliberately compiles without it (power monitoring works, labels read "NILM
+unavailable") so you can bring up sensing and Firebase before dropping the
+model in. **Do not re-implement NILM logic in the sketch.**
+
+`// TODO: verify` markers in the sketch flag every API detail that must be
+checked against your exact library versions (FirebaseClient's `Values` API and
+loop calls, the PZEM SoftwareSerial constructor guard, the hems_nilm header
+name/API, onDisconnect availability). Resolve them at first compile rather
+than trusting the comment.
+
+## 3 · Wiring & pin map
+
+Point-to-point — **one PZEM per serial port. No shared TTL bus.** Each
+PZEM-004T v3.0 TTL side: 5 V, GND, RX, TX (opto-isolated; power the TTL side
+from 5 V, logic levels are ESP32-safe in this configuration — confirm your
+PZEM board revision).
+
+| Signal | ESP32 pin | Notes |
+|---|---|---|
+| PZEM-1 TX → | **GPIO 26** (RX) | UART1 — remapped; UART1's default pins clash with flash |
+| PZEM-1 RX ← | **GPIO 27** (TX) | |
+| PZEM-2 TX → | **GPIO 16** (RX) | UART2 |
+| PZEM-2 RX ← | **GPIO 17** (TX) | |
+| PZEM-3 TX → | **GPIO 18** (RX) | EspSoftwareSerial @9600 — fine at this baud |
+| PZEM-3 RX ← | **GPIO 19** (TX) | |
+| Contactor driver | **GPIO 25** | via opto/transistor relay module → contactor coil |
+| UART0 (USB) | GPIO 1/3 | keep free for flashing + Serial monitor |
+
+Why these pins: they avoid the boot-strap pins (0, 2, 5, 12, 15), the
+SPI-flash pins (6–11), and the input-only pins (34–39). GPIO 25 idles LOW at
+boot, so an active-HIGH relay stays de-energised during reset — set
+`CONTACTOR_ACTIVE_HIGH` in `config.h` to match your relay board either way.
+
+**Mains side:** each PZEM's voltage terminals go to one phase + neutral; each
+current transformer clips around that phase's conductor only. The contactor's
+coil circuit must be driven through a proper relay/driver module — never from
+a GPIO directly. Mains wiring belongs to someone qualified.
+
+## 4 · Firebase device credentials
+
+The ESP32 signs in as the **device account** (email/password) created by the
+seed script — the only identity whose token carries `role: "device"`, which is
+what the security rules check for `/live`, `history/`, `events/` writes.
+
+1. Run the seed script (see repo root README / `scripts/seed.mjs`).
+2. In `config.h` fill in:
+   - `FIREBASE_API_KEY` — console → Project settings → General → Web API key
+   - `FIREBASE_DATABASE_URL` — console → Realtime Database URL
+   - `FIREBASE_PROJECT_ID` — the plain project id
+   - `DEVICE_EMAIL` / `DEVICE_PASSWORD` — whatever you seeded
+3. WiFi SSID/password, tariff, capacity, thresholds — same file.
+
+## 5 · Bring-up sequence
+
+1. **Dry run, no mains:** flash with only WiFi + Firebase configured. Serial
+   monitor @115200 should show WiFi connect, `[fb]` auth success, and 5 s
+   cycles with zeroed phases (PZEMs absent → NaN → zeros, `ok=false`).
+2. **Web checkpoint:** the dashboard's connection pill goes LIVE and `/live`
+   updates every 5 s (all zeros).
+3. **One PZEM on a bench socket:** confirm L1 shows plausible V/A/W/PF, then
+   add the other two.
+4. **Contactor:** from an admin login, hold the toggle — relay must click,
+   `/live/contactorState` confirms, the card leaves PENDING. Pull the ESP32's
+   power and confirm the UI shows OFFLINE (stale heartbeat) and the control
+   card disables.
+5. **NILM:** install `hems_nilm_cpp`, re-flash, toggle a trained appliance
+   (kettle is the classic) and watch `applianceLabel` + an `events/` doc.
+6. **Soak:** leave it for a day; check Firestore usage stays ≈1,440 history
+   writes + a handful of events (Spark budget is 20k/day).
+
+## 6 · Behaviour notes
+
+- **deviceOnline / offline detection.** The REST/SSE client library cannot
+  register a true RTDB `onDisconnect()` handler, so the device writes
+  `deviceOnline: true` + `lastUpdate` every cycle and the web app treats a
+  heartbeat older than 20 s as offline. Same outcome, no Blaze features.
+- **Daily kWh** = Σ PZEM lifetime counters − midnight baseline (stored in NVS,
+  survives reboots; rebases automatically if a PZEM counter is reset). Reset
+  time is local midnight (`TZ_OFFSET_SECONDS`, Lagos = UTC+1).
+- **High load**: flag has 5 % hysteresis (9 600 W on / 9 120 W off by
+  default); `events/` docs are debounced to ≥ 60 s apart.
+- **WiFi loss**: sensing, NILM, kWh accounting, high-load logic and the
+  contactor all keep running; FirebaseClient re-authenticates and the SSE
+  stream resumes when the network returns. Nothing in `loop()` blocks.
+- **Reboot safety**: last confirmed contactor state is restored from NVS
+  *before* WiFi comes up, so a power blink doesn't drop the building.
+
+## 7 · RAM headroom
+
+Two TLS sessions (write client + stream client) cost ≈ 45–50 kB each; with
+WiFi, both serial buffers and the Firebase stack expect **~120–170 kB free
+heap** in steady state (from ~320 kB total DRAM), logged every 30 s:
+
+```
+[heap] free=142312 minFree=118940
+```
+
+Keep an eye on `minFree`. If it trends under ~60 kB: check for String churn,
+shrink the events payloads, or lower the SSL RX buffer
+(`sslWrite.setBufferSizes(4096, 1024)` — TODO: verify availability on your
+WiFiClientSecure) before anything else. The NILM model's footprint comes on
+top of this — budget it from the port task's parity report.
+
+## 8 · Troubleshooting
+
+| Symptom | Likely cause |
+|---|---|
+| `[fb] auth error 400` | wrong API key, or email/password auth not enabled |
+| PERMISSION_DENIED on writes | device account missing the `role: device` claim — re-run the seed script, then power-cycle (forces re-auth) |
+| NaN on one phase | that PZEM's wiring (TX/RX swapped) or no mains on its voltage terminals |
+| Stream connects, no commands | admin write blocked by rules (check the web console), or `/control/contactor` path typo |
+| Reboots under load | brown-out — give the relay module its own 5 V supply, common GND |

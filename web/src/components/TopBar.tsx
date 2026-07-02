@@ -4,9 +4,10 @@ import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { BoltIcon, LogoutIcon, MoonIcon, ShieldIcon, SunIcon } from './Icons';
 import { fmtRelative } from '../lib/format';
-import type { LiveData } from '../lib/types';
+import { isDeviceLive, type LiveData } from '../lib/types';
 
-/** Connection status: deviceOnline + relative lastUpdate, in DM Mono. */
+/** Connection status: deviceOnline + relative lastUpdate, in DM Mono.
+ *  A stale lastUpdate counts as offline even if the flag still reads true. */
 function ConnPill({ live }: { live: LiveData | null }) {
   const [, force] = useState(0);
   useEffect(() => {
@@ -14,7 +15,7 @@ function ConnPill({ live }: { live: LiveData | null }) {
     return () => clearInterval(t);
   }, []);
 
-  const online = !!live?.deviceOnline;
+  const online = isDeviceLive(live);
   return (
     <span className={`conn-pill${online ? '' : ' is-off'}`} title="ESP32 connection">
       <span className={`conn-dot${online ? ' pill-dot--pulse' : ''}`} />

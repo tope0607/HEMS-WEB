@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ControlState, LiveData } from '../lib/types';
+import { isDeviceLive, type ControlState, type LiveData } from '../lib/types';
 import { fmtClock } from '../lib/format';
 import { Pill } from './Pill';
 import { PowerIcon } from './Icons';
@@ -48,7 +48,7 @@ export function ContactorCard({ live, control, onRequest }: ContactorCardProps) 
   );
 
   const beginHold = () => {
-    if (flow === 'pending' || !live.deviceOnline) return;
+    if (flow === 'pending' || !isDeviceLive(live)) return;
     setHolding(true);
     holdTimer.current = setTimeout(async () => {
       setHolding(false);
@@ -114,7 +114,7 @@ export function ContactorCard({ live, control, onRequest }: ContactorCardProps) 
       <button
         className={`hold-btn ${target === 1 ? 'hold-btn--on' : 'hold-btn--off'}${holding ? ' is-holding' : ''}`}
         style={{ ['--hold-ms' as string]: `${HOLD_MS}ms` }}
-        disabled={flow === 'pending' || !live.deviceOnline}
+        disabled={flow === 'pending' || !isDeviceLive(live)}
         onPointerDown={beginHold}
         onPointerUp={cancelHold}
         onPointerLeave={cancelHold}
@@ -133,7 +133,7 @@ export function ContactorCard({ live, control, onRequest }: ContactorCardProps) 
       </button>
 
       <div className="hold-hint mono-value" style={{ fontSize: 11.5 }}>
-        {live.deviceOnline
+        {isDeviceLive(live)
           ? `press and hold ${(HOLD_MS / 1000).toFixed(1)}s — releasing early cancels`
           : 'device offline — control unavailable'}
       </div>

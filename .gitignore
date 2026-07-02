@@ -19,3 +19,4 @@ emulator-data/
 
 # OS / editor
 .DS_Store
+web/tsconfig.tsbuildinfo
