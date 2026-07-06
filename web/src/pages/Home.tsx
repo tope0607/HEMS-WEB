@@ -30,15 +30,25 @@ export function HomePage() {
   const [range, setRange] = useState<RangeKey>('24h');
   const [historyPoints, setHistoryPoints] = useState<HistoryPoint[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     setHistoryLoading(true);
+    setHistoryError(null);
     (async () => {
-      const src = await getDataSource();
-      const points = await src.fetchHistory(range);
-      if (!cancelled) {
-        setHistoryPoints(points);
-        setHistoryLoading(false);
+      try {
+        const src = await getDataSource();
+        const points = await src.fetchHistory(range);
+        if (!cancelled) {
+          setHistoryPoints(points);
+          setHistoryLoading(false);
+        }
+      } catch (err) {
+        console.error('fetchHistory failed', err);
+        if (!cancelled) {
+          setHistoryError(err instanceof Error ? err.message : 'Failed to load history.');
+          setHistoryLoading(false);
+        }
       }
     })();
     return () => {
@@ -201,6 +211,17 @@ export function HomePage() {
         {historyLoading ? (
           <div className="empty-note mono-value" style={{ height: 260, display: 'grid', placeItems: 'center' }}>
             Loading history…
+          </div>
+        ) : historyError ? (
+          <div
+            className="empty-note mono-value"
+            style={{ height: 260, display: 'grid', placeItems: 'center', color: 'var(--tint-red-fg)' }}
+          >
+            {historyError}
+          </div>
+        ) : historyPoints.length === 0 ? (
+          <div className="empty-note mono-value" style={{ height: 260, display: 'grid', placeItems: 'center' }}>
+            No history yet — nothing published since the device came online.
           </div>
         ) : (
           <PowerAreaChart points={historyPoints} range={range} />

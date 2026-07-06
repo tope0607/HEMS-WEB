@@ -16,22 +16,32 @@ export function HistoryPage() {
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setError(null);
     (async () => {
-      const src = await getDataSource();
-      const to = Date.now();
-      const from = to - RANGE_MS[range];
-      const [h, e] = await Promise.all([
-        src.fetchHistoryBetween(from, to),
-        src.fetchEventsBetween(from, to),
-      ]);
-      if (!cancelled) {
-        setHistory(h);
-        setEvents(e);
-        setLoading(false);
+      try {
+        const src = await getDataSource();
+        const to = Date.now();
+        const from = to - RANGE_MS[range];
+        const [h, e] = await Promise.all([
+          src.fetchHistoryBetween(from, to),
+          src.fetchEventsBetween(from, to),
+        ]);
+        if (!cancelled) {
+          setHistory(h);
+          setEvents(e);
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('history/events fetch failed', err);
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load history.');
+          setLoading(false);
+        }
       }
     })();
     return () => {
@@ -195,8 +205,13 @@ export function HistoryPage() {
             )}
           </div>
 
-          {!loading && ((tab === 'telemetry' && history.length === 0) || (tab === 'events' && events.length === 0)) && (
-            <div className="empty-note mono-value">Nothing recorded in this range</div>
+          {error ? (
+            <div className="empty-note mono-value" style={{ color: 'var(--tint-red-fg)' }}>{error}</div>
+          ) : (
+            !loading &&
+            ((tab === 'telemetry' && history.length === 0) || (tab === 'events' && events.length === 0)) && (
+              <div className="empty-note mono-value">Nothing recorded in this range</div>
+            )
           )}
         </section>
       </div>
