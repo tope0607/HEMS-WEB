@@ -3,11 +3,13 @@
    Target: ESP32-WROOM-32UE (Arduino core 3.x), no external server.
 
    Duties, all non-blocking (no delay() anywhere):
-     • poll 3× PZEM-004T every 5 s over point-to-point UARTs
-     • totals, per-phase Q = sqrt(max(S²−P², 0)) (inductive convention),
-       daily kWh (PZEM cumulative counters − midnight baseline), ₦ cost
-     • feed (P, Q) into hems_nilm_cpp → appliance label + events
-     • OVERWRITE RTDB /live every cycle (free-tier: RTDB, not Firestore)
+     • poll 3× PZEM-004T at 1 Hz over point-to-point UARTs (the NILM
+       detector is trained on 1 Hz plateaus)
+     • per-phase Q = sqrt(max(S²−P², 0)) (inductive convention — verified
+       identical to nilm/nilm/signal.py), daily kWh (PZEM cumulative
+       counters − midnight baseline), ₦ cost
+     • feed per-phase (P, Q) into hems_nilm_cpp → appliance label + events
+     • OVERWRITE RTDB /live every 5 s (free-tier: RTDB, not Firestore)
      • one downsampled Firestore history doc every 60 s
      • stream /control/contactor, actuate relay, confirm into /live
      • high-load flag with hysteresis + debounced (≥60 s) events doc
@@ -37,11 +39,13 @@
 
 #include <FirebaseClient.h>
 
-/* ── NILM (external port — do NOT re-implement here) ─────────────────────
-   hems_nilm_cpp comes from the separate NILM-port task (with its parity
-   test). If it isn't installed the sketch still builds so power monitoring
-   can be brought up first; appliance labels read "NILM unavailable".
-   TODO: verify the exact header name & API against the delivered port. */
+/* ── NILM (firmware/libraries/hems_nilm_cpp — the C++ port) ──────────────
+   Faithful port of the Python engine in nilm/, parity-tested against it
+   (see the library's extras/parity). Install by copying the library folder
+   into ~/Arduino/libraries/. The signature model is baked in at compile
+   time from nilm_model.h (regenerate with nilm/tools/export_model.py after
+   every train.py). If the library isn't installed the sketch still builds
+   so power monitoring can be brought up first. */
 #if __has_include(<hems_nilm.h>)
   #include <hems_nilm.h>
   #define HAS_NILM 1
@@ -75,13 +79,13 @@ static PhaseSample readPzem(PZEM004Tv30 &pz) {
 }
 
 /* Reactive power, inductive assumption: Q = sqrt(max(S² − P², 0)), positive.
-   ⚠ This sign convention MUST match what the NILM model was trained on —
-   a silent mismatch breaks classification without any error message.
-   TODO: verify against the hems_nilm_cpp training pipeline. */
-static float reactivePower(const PhaseSample &s) {
-  const float apparent = s.v * s.i;                 // S = V·I
-  const float s2 = apparent * apparent, p2 = s.p * s.p;
-  return s2 > p2 ? sqrtf(s2 - p2) : 0.0f;
+   VERIFIED against the training pipeline: nilm/nilm/signal.py derive_sq()
+   uses the identical magnitude convention (|Q|, no leading/lagging sign),
+   both for characterisation and inference — so features match by design. */
+static double reactivePower(const PhaseSample &s) {
+  const double apparent = (double)s.v * (double)s.i;   // S = V·I
+  const double s2 = apparent * apparent, p2 = (double)s.p * (double)s.p;
+  return s2 > p2 ? sqrt(s2 - p2) : 0.0;
 }
 
 /* ═══ Firebase ══════════════════════════════════════════════════════════ */
@@ -109,7 +113,7 @@ static int pendingControlState = -1; // set by the stream callback, applied in l
 
 static char applianceLabel[48] = "Starting up";
 
-/* 60 s history accumulator (12 × 5 s samples) */
+/* 60 s history accumulator (60 × 1 s samples) */
 static float accP = 0, accL1 = 0, accL2 = 0, accL3 = 0;
 static uint16_t accN = 0;
 
@@ -117,11 +121,11 @@ static uint16_t accN = 0;
 static float kwhBaseline = 0;
 static uint32_t baselineDay = 0; // YYYYMMDD local
 
-static uint32_t tPoll = 0, tHistory = 0, tHeap = 0;
+static uint32_t tSample = 0, tLive = 0, tHistory = 0, tHeap = 0;
 static uint32_t lastHighLoadEventMs = 0;
 
 #if HAS_NILM
-HemsNilm nilm; // TODO: verify class name/API against the delivered port
+HemsNilm nilm;
 #endif
 
 /* ═══ Small helpers ═════════════════════════════════════════════════════ */
@@ -275,18 +279,21 @@ static void rollDailyBaselineIfNeeded(float lifetimeKwh) {
   }
 }
 
-/* ═══ The 5-second cycle ════════════════════════════════════════════════ */
+/* ═══ The 1-second sensing cycle ════════════════════════════════════════
+   Reads all three PZEMs, updates energy/cost and the high-load flag, and
+   feeds the NILM engine one per-phase (P, Q) sample — exactly the format
+   its detector was trained on. Cloud publishing happens on its own slower
+   timers; sensing never waits for the network. */
 
-static void pollCycle() {
+static void sampleCycle() {
   /* Each PZEM read is a short Modbus transaction on its own port (~100 ms
-     worst case each); the cycle stays well under the 5 s budget and never
-     busy-waits. */
+     worst case each); three fit comfortably inside the 1 s budget. */
   ph1 = readPzem(pzem1);
   ph2 = readPzem(pzem2);
   ph3 = readPzem(pzem3);
 
   totalP = ph1.p + ph2.p + ph3.p;
-  totalQ = reactivePower(ph1) + reactivePower(ph2) + reactivePower(ph3);
+  totalQ = (float)(reactivePower(ph1) + reactivePower(ph2) + reactivePower(ph3));
 
   const float lifetimeKwh = ph1.energyKwh + ph2.energyKwh + ph3.energyKwh;
   rollDailyBaselineIfNeeded(lifetimeKwh);
@@ -304,20 +311,33 @@ static void pollCycle() {
   }
 
 #if HAS_NILM
-  /* Feed building totals into the NILM engine; it owns all detection logic.
-     TODO: verify method names/units against the delivered hems_nilm_cpp. */
+  /* Per-phase P and Q in the model's phase order (PZEM-1/2/3 → A/B/C).
+     The engine owns detection, classification and attribution; events
+     surface here as (label, ON/OFF, confidence). */
+  const double p[3] = { ph1.p, ph2.p, ph3.p };
+  const double q[3] = { reactivePower(ph1), reactivePower(ph2), reactivePower(ph3) };
+  const double tSec = timeReady() ? (double)time(nullptr) : millis() / 1000.0;
+
+  nilm.processSample(tSec, p, q);
   HemsNilmEvent ev;
-  if (nilm.update(totalP, totalQ, millis(), ev)) {
-    snprintf(applianceLabel, sizeof(applianceLabel), "%s %s (%d%%)",
-             ev.appliance, ev.on ? "ON" : "OFF",
-             (int)roundf(ev.confidence * 100.0f));
-    publishEvent("appliance", ev.appliance, ev.on ? "ON" : "OFF", totalP);
+  while (nilm.popEvent(ev)) {
+    if (ev.classId >= 0) {
+      snprintf(applianceLabel, sizeof(applianceLabel), "%s %s (%d%%)",
+               ev.label, ev.on ? "ON" : "OFF",
+               (int)lroundf(ev.confidence * 100.0f));
+      publishEvent("appliance", ev.label, ev.on ? "ON" : "OFF", totalP);
+    } else {
+      /* rejected by tau: an untrained load — report honestly, don't guess */
+      snprintf(applianceLabel, sizeof(applianceLabel), "Unknown load %s",
+               ev.on ? "ON" : "OFF");
+      publishEvent("appliance", "unknown", ev.on ? "ON" : "OFF", totalP);
+    }
+    Serial.printf("[nilm] %s dP=%+.0fW dQ=%+.0fVAR d=%.2f -> %s\n",
+                  ev.on ? "ON " : "OFF", ev.dP, ev.dQ, ev.dist, applianceLabel);
   }
 #else
   snprintf(applianceLabel, sizeof(applianceLabel), "NILM unavailable");
 #endif
-
-  publishLive();
 
   accP += totalP; accL1 += ph1.p; accL2 += ph2.p; accL3 += ph3.p;
   accN++;
@@ -343,7 +363,8 @@ void setup() {
   pzem3Serial.begin(9600, SWSERIAL_8N1, PZEM3_RX, PZEM3_TX);
 
 #if HAS_NILM
-  nilm.begin(); // TODO: verify init signature (model/config args?)
+  nilm.begin();   // model/config baked in via nilm_model.h at compile time
+  Serial.printf("[nilm] engine ready: %d classes\n", HemsNilm::numClasses());
 #endif
 
   WiFi.mode(WIFI_STA);
@@ -398,9 +419,14 @@ void loop() {
     }
   }
 
-  if (now - tPoll >= POLL_INTERVAL_MS) {
-    tPoll = now;
-    pollCycle(); // runs (and keeps sensing) even with WiFi down
+  if (now - tSample >= SAMPLE_INTERVAL_MS) {
+    tSample = now;
+    sampleCycle(); // sensing + NILM keep running even with WiFi down
+  }
+
+  if (now - tLive >= LIVE_PUBLISH_MS) {
+    tLive = now;
+    publishLive(); // 5 s overwrite of RTDB /live (free-tier discipline)
   }
 
   if (now - tHistory >= HISTORY_INTERVAL_MS) {

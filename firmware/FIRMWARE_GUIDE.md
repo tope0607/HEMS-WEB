@@ -20,21 +20,24 @@ one chip — there is no other computer in the system.
 | **FirebaseClient** | Mobizt | ≥ 1.4.x | Auth, RTDB (SSE stream), Firestore |
 | **PZEM004Tv30** | Jakub Mandula | ≥ 1.1.2 | PZEM-004T v3.0 Modbus reads |
 | **EspSoftwareSerial** | Dirk Kaar | ≥ 8.1 | 3rd PZEM port |
-| **hems_nilm_cpp** | (this project) | from the NILM-port task | appliance detection |
+| **hems_nilm_cpp** | this repo: `firmware/libraries/hems_nilm_cpp` | 1.0.0 | on-device appliance detection |
 
-`hems_nilm_cpp` is a **local library**: copy its folder into
-`~/Arduino/libraries/hems_nilm_cpp/` so `#include <hems_nilm.h>` resolves.
-It is produced by the separate NILM C++ port task **together with its parity
-test** — if you don't have it yet, finish that task first. The sketch
-deliberately compiles without it (power monitoring works, labels read "NILM
-unavailable") so you can bring up sensing and Firebase before dropping the
-model in. **Do not re-implement NILM logic in the sketch.**
+`hems_nilm_cpp` is a **local library that lives in this repository** — the
+C++ port of the Python engine in `nilm/`, shipped with its parity test
+(`extras/parity`, last result: 115/115 events identical to Python, energy
+≤1e-6 Wh). Copy (or symlink) the folder into `~/Arduino/libraries/` so
+`#include <hems_nilm.h>` resolves. The signature model is compiled in from
+`src/nilm_model.h`; regenerate it with `nilm/tools/export_model.py` after
+every retraining (see `docs/NILM_INTEGRATION.md` for the full workflow).
+The sketch still compiles without the library (labels read "NILM
+unavailable") so sensing and Firebase can be brought up first.
 
 `// TODO: verify` markers in the sketch flag every API detail that must be
 checked against your exact library versions (FirebaseClient's `Values` API and
-loop calls, the PZEM SoftwareSerial constructor guard, the hems_nilm header
-name/API, onDisconnect availability). Resolve them at first compile rather
-than trusting the comment.
+loop calls, the PZEM SoftwareSerial constructor guard, onDisconnect
+availability). Resolve them at first compile rather than trusting the
+comment. The NILM API and Q-convention markers are gone: both are pinned by
+the in-repo library and its parity test.
 
 ## 3 · Wiring & pin map
 
@@ -91,8 +94,12 @@ what the security rules check for `/live`, `history/`, `events/` writes.
    `/live/contactorState` confirms, the card leaves PENDING. Pull the ESP32's
    power and confirm the UI shows OFFLINE (stale heartbeat) and the control
    card disables.
-5. **NILM:** install `hems_nilm_cpp`, re-flash, toggle a trained appliance
-   (kettle is the classic) and watch `applianceLabel` + an `events/` doc.
+5. **NILM:** run the characterisation → `train.py` → `export_model.py`
+   pipeline (docs/NILM_INTEGRATION.md), copy `firmware/libraries/
+   hems_nilm_cpp` into `~/Arduino/libraries/`, re-flash, toggle a trained
+   appliance and watch the Serial `[nilm]` log, `applianceLabel`, and the
+   `events/` doc appear. Untrained loads must read "Unknown load", not a
+   wrong appliance — that's the rejection threshold working.
 6. **Soak:** leave it for a day; check Firestore usage stays ≈1,440 history
    writes + a handful of events (Spark budget is 20k/day).
 

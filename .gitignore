@@ -20,3 +20,14 @@ emulator-data/
 # OS / editor
 .DS_Store
 web/tsconfig.tsbuildinfo
+
+# NILM toolchain: regenerable artifacts (nilm_model.h is committed though —
+# the firmware needs it to compile)
+nilm/.venv/
+nilm/characterization.csv
+nilm/day_stream.csv
+nilm/ground_truth.json
+nilm/model.json
+nilm/reference.json
+nilm/__pycache__/
+nilm/nilm/__pycache__/

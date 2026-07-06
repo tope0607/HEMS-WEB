@@ -28,7 +28,10 @@ is infrastructure only.
 | `web/` | the React + Vite SPA (dark/light instrument-panel UI) |
 | `docs/screenshots/` | desktop + mobile × dark + light × admin + user |
 | `firmware/hems_esp32/` | Arduino sketch + `config.h` |
+| `firmware/libraries/hems_nilm_cpp/` | on-device NILM engine (C++ port + parity test) |
 | `firmware/FIRMWARE_GUIDE.md` | board setup, libraries, pin map, bring-up |
+| `nilm/` | Python NILM engine: simulator, training, model export |
+| `docs/NILM_INTEGRATION.md` | how NILM connects to the ESP32 + Firebase, step by step |
 
 ## Quick start (no hardware, no Firebase project)
 

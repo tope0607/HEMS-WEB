@@ -32,8 +32,12 @@
 /* Lagos is UTC+1, no DST. Daily kWh resets at local midnight. */
 #define TZ_OFFSET_SECONDS    3600L
 
-/* ── Cadence (ms) ─────────────────────────────────────────────────────── */
-#define POLL_INTERVAL_MS        5000UL   // PZEM sweep + /live overwrite
+/* ── Cadence (ms) ─────────────────────────────────────────────────────────
+   The NILM event detector is trained on 1 Hz plateaus (settle_window
+   consecutive 1 s samples), so sensing runs at 1 Hz; the cloud only sees
+   the 5 s /live overwrite and the 60 s history doc (free-tier discipline). */
+#define SAMPLE_INTERVAL_MS      1000UL   // PZEM sweep + NILM feed (1 Hz)
+#define LIVE_PUBLISH_MS         5000UL   // RTDB /live overwrite
 #define HISTORY_INTERVAL_MS    60000UL   // one downsampled Firestore doc
 #define HIGH_LOAD_DEBOUNCE_MS  60000UL   // min spacing between high_load events
 #define HEAP_LOG_INTERVAL_MS   30000UL   // free-heap watermark to Serial
@@ -53,3 +57,10 @@
 
 #define CONTACTOR_PIN          25
 #define CONTACTOR_ACTIVE_HIGH  1   // 1: HIGH energises the relay coil driver
+
+/* ── NILM phase mapping ────────────────────────────────────────────────────
+   nilm/config.json declares the phases in order (e.g. ["A","B","C"]) and
+   pins every appliance to one of them. The firmware feeds the engine in
+   that same order: PZEM-1 → index 0 (A), PZEM-2 → index 1 (B),
+   PZEM-3 → index 2 (C). Wire each PZEM to the mains phase the electrician
+   mapped, or reorder here if the field wiring ends up different.           */
