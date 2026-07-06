@@ -29,11 +29,15 @@
 
 #include "config.h"
 
-/* PZEM-3 rides EspSoftwareSerial; this define exposes the SoftwareSerial
-   constructor inside PZEM004Tv30.
-   TODO: verify against your installed PZEM004Tv30 version — in mandulaj's
-   library the guard macro is PZEM004_SOFTSERIAL. */
-#define PZEM004_SOFTSERIAL 1
+/* PZEM-3 rides EspSoftwareSerial. Do NOT define PZEM004_SOFTSERIAL here:
+   that macro only controls whether PZEM004Tv30's OWN .cpp compiles in its
+   SoftwareSerial-specific constructor, and the library auto-enables it only
+   for AVR/ESP8266 — never for ESP32. A #define in this .ino is invisible to
+   that separately-compiled .cpp, so defining it just declares a constructor
+   whose body was never built, producing an "undefined reference" at link
+   time. Fix: don't declare it — pzem3 below binds to PZEM004Tv30's generic
+   Stream& constructor instead (SoftwareSerial IS-A Stream), which IS always
+   compiled in on every platform. */
 #include <SoftwareSerial.h>
 #include <PZEM004Tv30.h>
 
@@ -70,7 +74,7 @@
 PZEM004Tv30 pzem1(Serial1, PZEM1_RX, PZEM1_TX); // UART1, remapped pins
 PZEM004Tv30 pzem2(Serial2, PZEM2_RX, PZEM2_TX); // UART2
 SoftwareSerial pzem3Serial(PZEM3_RX, PZEM3_TX);
-PZEM004Tv30 pzem3(pzem3Serial);                 // TODO: verify SoftwareSerial ctor name/signature
+PZEM004Tv30 pzem3(pzem3Serial);                 // binds to PZEM004Tv30(Stream&, uint8_t=PZEM_DEFAULT_ADDR)
 
 struct PhaseSample {
   float p = 0, v = 0, i = 0, pf = 0, energyKwh = 0;
