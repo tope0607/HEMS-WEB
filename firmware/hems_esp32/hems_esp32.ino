@@ -37,6 +37,17 @@
 #include <SoftwareSerial.h>
 #include <PZEM004Tv30.h>
 
+/* FirebaseClient (mobizt) gates its entire API behind these feature macros —
+   they MUST be defined before the header is included, or UserAuth,
+   RealtimeDatabase, Firestore::Documents, Values, Document<>, etc. simply
+   don't exist and every use of them fails to compile with "does not name a
+   type". Verified against the library's own examples (App/AppInitialization,
+   RealtimeDatabase/Set, RealtimeDatabase/Stream, FirestoreDatabase/Documents/
+   CreateDocument). */
+#define ENABLE_USER_AUTH
+#define ENABLE_DATABASE
+#define ENABLE_FIRESTORE
+
 #include <FirebaseClient.h>
 
 /* ── NILM (firmware/libraries/hems_nilm_cpp — the C++ port) ──────────────
@@ -91,12 +102,13 @@ static double reactivePower(const PhaseSample &s) {
 /* ═══ Firebase ══════════════════════════════════════════════════════════ */
 
 WiFiClientSecure sslWrite, sslStream;
-DefaultNetwork network;
-UserAuth deviceAuth(FIREBASE_API_KEY, DEVICE_EMAIL, DEVICE_PASSWORD);
-FirebaseApp fbApp;
 using AsyncClient = AsyncClientClass;
-AsyncClient clientWrite(sslWrite, getNetwork(network));  // /live, history, events
-AsyncClient clientStream(sslStream, getNetwork(network)); // /control SSE stream
+AsyncClient clientWrite(sslWrite);   // /live, history, events
+AsyncClient clientStream(sslStream); // /control SSE stream (its own client so
+                                      // long-polling never starves writes)
+/* 4th arg = token expiry in seconds, must be < 3600 (library-enforced). */
+UserAuth deviceAuth(FIREBASE_API_KEY, DEVICE_EMAIL, DEVICE_PASSWORD, 3000);
+FirebaseApp fbApp;
 RealtimeDatabase Database;
 Firestore::Documents Docs;
 
@@ -229,16 +241,18 @@ static void publishLive() {
 static void publishHistory() {
   if (!fbApp.ready() || !timeReady() || accN == 0) return;
 
-  // TODO: verify Values API details against your FirebaseClient version.
   Values::MapValue phases("L1", Values::IntegerValue((int)roundf(accL1 / accN)));
   phases.add("L2", Values::IntegerValue((int)roundf(accL2 / accN)));
   phases.add("L3", Values::IntegerValue((int)roundf(accL3 / accN)));
 
-  Document<Values::Value> doc;
-  doc.add("ts", Values::Value(Values::IntegerValue(epochMs())));
+  // Document<Values::Value> has no default constructor — the first field
+  // goes in the constructor, the rest via .add() (verified against
+  // FirestoreDatabase/Documents/CreateDocument). DoubleValue wraps a
+  // number_t(value, decimalPlaces), not a bare double.
+  Document<Values::Value> doc("ts", Values::Value(Values::IntegerValue(epochMs())));
   doc.add("avgPowerW", Values::Value(Values::IntegerValue((int)roundf(accP / accN))));
-  doc.add("dailyKwh", Values::Value(Values::DoubleValue(dailyKwh)));
-  doc.add("costNaira", Values::Value(Values::DoubleValue(dailyKwh * TARIFF_NAIRA_PER_KWH)));
+  doc.add("dailyKwh", Values::Value(Values::DoubleValue(number_t(dailyKwh, 3))));
+  doc.add("costNaira", Values::Value(Values::DoubleValue(number_t(dailyKwh * TARIFF_NAIRA_PER_KWH, 2))));
   doc.add("phases", Values::Value(phases));
 
   Docs.createDocument(clientWrite, Firestore::Parent(FIREBASE_PROJECT_ID),
@@ -252,8 +266,7 @@ static void publishEvent(const char *type, const char *appliance,
                          const char *onOff, float powerW) {
   if (!fbApp.ready() || !timeReady()) return;
 
-  Document<Values::Value> doc;
-  doc.add("ts", Values::Value(Values::IntegerValue(epochMs())));
+  Document<Values::Value> doc("ts", Values::Value(Values::IntegerValue(epochMs())));
   doc.add("type", Values::Value(Values::StringValue(type)));
   if (appliance) doc.add("appliance", Values::Value(Values::StringValue(appliance)));
   if (onOff) doc.add("event", Values::Value(Values::StringValue(onOff)));
@@ -392,17 +405,16 @@ void setup() {
   Database.url(FIREBASE_DATABASE_URL);
   fbApp.getApp<Firestore::Documents>(Docs);
 
-  /* SSE stream on its own async client so long-polling never starves writes */
+  // Restrict the SSE stream to the event types we act on.
+  clientStream.setSSEFilters("get,put,patch,keep-alive,cancel,auth_revoked");
   Database.get(clientStream, "/control/contactor", controlStreamCallback,
                true /* SSE stream */, "controlStream");
 }
 
 void loop() {
-  /* Firebase pumps — keep these running every pass, never block them.
-     TODO: verify which loop() calls your FirebaseClient version requires. */
+  // Pumps auth refresh + all async Firebase tasks (RTDB, stream, Firestore).
+  // RealtimeDatabase/Firestore::Documents have no loop() of their own.
   fbApp.loop();
-  Database.loop();
-  Docs.loop();
 
   const uint32_t now = millis();
 

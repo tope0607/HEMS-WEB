@@ -145,3 +145,4 @@ top of this — budget it from the port task's parity report.
 | NaN on one phase | that PZEM's wiring (TX/RX swapped) or no mains on its voltage terminals |
 | Stream connects, no commands | admin write blocked by rules (check the web console), or `/control/contactor` path typo |
 | Reboots under load | brown-out — give the relay module its own 5 V supply, common GND |
+| `'UserAuth' does not name a type`, `'RealtimeDatabase' does not name a type`, `'Firestore' has not been declared`, or similar for every FirebaseClient symbol | FirebaseClient gates its whole API behind feature macros. `#define ENABLE_USER_AUTH`, `#define ENABLE_DATABASE`, `#define ENABLE_FIRESTORE` must appear **before** `#include <FirebaseClient.h>` — already fixed in the checked-in sketch, but if you copy code out of it into a new file, bring these three lines along |
