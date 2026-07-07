@@ -1,8 +1,15 @@
 # HEMS ESP32 Firmware Guide
 
-Sketch: `firmware/hems_esp32/hems_esp32.ino` + `config.h`. Target hardware is
-an **ESP32-WROOM-32UE** (4 MB flash, no PSRAM). All processing happens on this
-one chip — there is no other computer in the system.
+Sketch: `firmware/hems_esp32/hems_esp32.ino` + `config.h` + `build_opt.h`.
+Target hardware is an **ESP32-WROOM-32UE** (4 MB flash, no PSRAM). All
+processing happens on this one chip — there is no other computer in the
+system.
+
+`build_opt.h`, in the same folder as the `.ino`, is not optional: it forces
+on the PZEM library's SoftwareSerial support for PZEM-3 (see §8 for why a
+plain `#define` in the sketch can't do this itself). Arduino IDE picks it up
+automatically as long as it stays next to `hems_esp32.ino` — no setup step
+needed beyond keeping the file where it is.
 
 ## 1 · Board setup (Arduino IDE)
 
@@ -146,4 +153,4 @@ top of this — budget it from the port task's parity report.
 | Stream connects, no commands | admin write blocked by rules (check the web console), or `/control/contactor` path typo |
 | Reboots under load | brown-out — give the relay module its own 5 V supply, common GND |
 | `'UserAuth' does not name a type`, `'RealtimeDatabase' does not name a type`, `'Firestore' has not been declared`, or similar for every FirebaseClient symbol | FirebaseClient gates its whole API behind feature macros. `#define ENABLE_USER_AUTH`, `#define ENABLE_DATABASE`, `#define ENABLE_FIRESTORE` must appear **before** `#include <FirebaseClient.h>` — already fixed in the checked-in sketch, but if you copy code out of it into a new file, bring these three lines along |
-| Compiles fine, then linker error `undefined reference to 'PZEM004Tv30::PZEM004Tv30(EspSoftwareSerial::BasicUART<...>&, unsigned char)'` | Don't `#define PZEM004_SOFTSERIAL` in the sketch. That macro controls whether PZEM004Tv30's own `.cpp` (a separate translation unit your `#define` can't reach) compiles in its SoftwareSerial constructor — it auto-enables only for AVR/ESP8266, never ESP32, so the symbol is declared but never built. The checked-in sketch instead lets `pzem3` bind to the library's generic `Stream&` constructor (always compiled in), which works because `SoftwareSerial` IS-A `Stream` |
+| Linker error `undefined reference to 'PZEM004Tv30::PZEM004Tv30(...SoftwareSerial...)'`, **or** compile error `no matching function for call to 'PZEM004Tv30::PZEM004Tv30(SoftwareSerial&)'` | `PZEM004Tv30.h` only declares its `SoftwareSerial&`/`Stream&` constructors inside `#if defined(PZEM004_SOFTSERIAL)`, auto-enabled by the library for AVR/ESP8266 only — never ESP32. A `#define` in the `.ino` reaches only the sketch's own translation unit, not the library's separately-compiled `.cpp`, so the two disagree (one error if only the sketch defines it, the other if neither does). Fixed via `firmware/hems_esp32/build_opt.h`, which injects `-DPZEM004_SOFTSERIAL` into every file the build compiles, sketch and libraries alike — confirm that file is present next to the `.ino` (Arduino IDE picks it up automatically; no setup step needed beyond having it in the folder) |

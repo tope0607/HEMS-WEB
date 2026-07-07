@@ -29,15 +29,14 @@
 
 #include "config.h"
 
-/* PZEM-3 rides EspSoftwareSerial. Do NOT define PZEM004_SOFTSERIAL here:
-   that macro only controls whether PZEM004Tv30's OWN .cpp compiles in its
-   SoftwareSerial-specific constructor, and the library auto-enables it only
-   for AVR/ESP8266 — never for ESP32. A #define in this .ino is invisible to
-   that separately-compiled .cpp, so defining it just declares a constructor
-   whose body was never built, producing an "undefined reference" at link
-   time. Fix: don't declare it — pzem3 below binds to PZEM004Tv30's generic
-   Stream& constructor instead (SoftwareSerial IS-A Stream), which IS always
-   compiled in on every platform. */
+/* PZEM-3 rides EspSoftwareSerial. PZEM004Tv30's SoftwareSerial/Stream
+   constructors only exist when PZEM004_SOFTSERIAL is defined — and the
+   library auto-enables that only for AVR/ESP8266, never ESP32. A #define
+   here would only reach this sketch's own translation unit, not the
+   library's separately-compiled .cpp, so the two would disagree (declared
+   here, never implemented there). The fix lives in build_opt.h, next to
+   this .ino: it injects -DPZEM004_SOFTSERIAL into every file the build
+   compiles — sketch and libraries alike — so both sides agree. */
 #include <SoftwareSerial.h>
 #include <PZEM004Tv30.h>
 
@@ -74,7 +73,7 @@
 PZEM004Tv30 pzem1(Serial1, PZEM1_RX, PZEM1_TX); // UART1, remapped pins
 PZEM004Tv30 pzem2(Serial2, PZEM2_RX, PZEM2_TX); // UART2
 SoftwareSerial pzem3Serial(PZEM3_RX, PZEM3_TX);
-PZEM004Tv30 pzem3(pzem3Serial);                 // binds to PZEM004Tv30(Stream&, uint8_t=PZEM_DEFAULT_ADDR)
+PZEM004Tv30 pzem3(pzem3Serial);                 // binds to PZEM004Tv30(SoftwareSerial&, uint8_t=PZEM_DEFAULT_ADDR) — needs build_opt.h
 
 struct PhaseSample {
   float p = 0, v = 0, i = 0, pf = 0, energyKwh = 0;
