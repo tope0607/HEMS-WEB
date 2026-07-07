@@ -214,44 +214,51 @@ static void controlStreamCallback(AsyncResult &res) {
 
 /* ═══ RTDB /live overwrite ══════════════════════════════════════════════ */
 
+/* NaN/Inf guard — a single 'nan' or 'inf' token in the JSON is invalid and
+   RTDB rejects the whole write with HTTP 400. */
+static float jsonSafe(float x) { return (isnan(x) || isinf(x)) ? 0.0f : x; }
+
 static void publishLive() {
   if (!fbApp.ready()) return;
 
-  JsonWriter writer;
-  object_t json, phases, o1, o2, o3, tmp1, tmp2, tmp3, tmp4;
+  /* Build the /live JSON directly. Passing raw float/bool through the
+     library's JsonWriter produced malformed JSON (its create() wants
+     number_t/boolean_t placeholders), which is what caused the persistent
+     'live error 400'. A hand-built, NaN-guarded string is bulletproof and
+     handed to the library as object_t(<json string>).
+     The deviceOnline+lastUpdate heartbeat is the online signal: the REST/
+     SSE client has no server-side onDisconnect(), so the web app treats a
+     stale lastUpdate as offline. applianceLabel only ever holds controlled
+     text (class names + ON/OFF/%), so it needs no JSON escaping. */
+  char buf[640];
+  snprintf(buf, sizeof(buf),
+    "{"
+      "\"totalPowerW\":%d,"
+      "\"phases\":{"
+        "\"L1\":{\"p\":%d,\"v\":%.1f,\"i\":%.2f,\"pf\":%.2f},"
+        "\"L2\":{\"p\":%d,\"v\":%.1f,\"i\":%.2f,\"pf\":%.2f},"
+        "\"L3\":{\"p\":%d,\"v\":%.1f,\"i\":%.2f,\"pf\":%.2f}"
+      "},"
+      "\"dailyKwh\":%.3f,"
+      "\"costNaira\":%.2f,"
+      "\"applianceLabel\":\"%s\","
+      "\"contactorState\":%d,"
+      "\"highLoad\":%s,"
+      "\"lastUpdate\":%lld,"
+      "\"deviceOnline\":true"
+    "}",
+    (int)lroundf(jsonSafe(totalP)),
+    (int)lroundf(jsonSafe(ph1.p)), jsonSafe(ph1.v), jsonSafe(ph1.i), jsonSafe(ph1.pf),
+    (int)lroundf(jsonSafe(ph2.p)), jsonSafe(ph2.v), jsonSafe(ph2.i), jsonSafe(ph2.pf),
+    (int)lroundf(jsonSafe(ph3.p)), jsonSafe(ph3.v), jsonSafe(ph3.i), jsonSafe(ph3.pf),
+    jsonSafe(dailyKwh),
+    jsonSafe((float)(dailyKwh * TARIFF_NAIRA_PER_KWH)),
+    applianceLabel,
+    contactorState,
+    highLoad ? "true" : "false",
+    (long long)epochMs());
 
-  auto phaseObj = [&](object_t &out, const PhaseSample &s) {
-    object_t a, b, c, d;
-    writer.create(a, "p", (int)roundf(s.p));
-    writer.create(b, "v", s.v);
-    writer.create(c, "i", s.i);
-    writer.create(d, "pf", s.pf);
-    writer.join(out, 4, a, b, c, d);
-  };
-  phaseObj(o1, ph1); phaseObj(o2, ph2); phaseObj(o3, ph3);
-  writer.create(tmp1, "L1", o1);
-  writer.create(tmp2, "L2", o2);
-  writer.create(tmp3, "L3", o3);
-  writer.join(phases, 3, tmp1, tmp2, tmp3);
-
-  object_t f1, f2, f3, f4, f5, f6, f7, f8, f9;
-  writer.create(f1, "totalPowerW", (int)roundf(totalP));
-  writer.create(f2, "phases", phases);
-  writer.create(f3, "dailyKwh", dailyKwh);
-  writer.create(f4, "costNaira", dailyKwh * TARIFF_NAIRA_PER_KWH);
-  writer.create(f5, "applianceLabel", applianceLabel);
-  writer.create(f6, "contactorState", contactorState);
-  writer.create(f7, "highLoad", highLoad);
-  writer.create(f8, "lastUpdate", epochMs());
-  /* The web app treats a stale lastUpdate as offline: the REST/SSE client
-     library has no true RTDB onDisconnect() handler, so freshness of this
-     heartbeat IS the online signal.
-     TODO: verify — if your FirebaseClient version gained onDisconnect
-     support, register it here instead. */
-  writer.create(f9, "deviceOnline", true);
-  writer.join(json, 9, f1, f2, f3, f4, f5, f6, f7, f8, f9);
-
-  Database.set<object_t>(clientWrite, "/live", json, fbCallback, "live");
+  Database.set<object_t>(clientWrite, "/live", object_t(buf), fbCallback, "live");
 }
 
 /* ═══ Firestore writes (downsampled — free-tier discipline) ═════════════ */
