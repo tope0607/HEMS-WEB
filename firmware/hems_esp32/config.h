@@ -11,10 +11,13 @@
 
 /* ── Firebase project ─────────────────────────────────────────────────────
    Web API key: console → Project settings → General.
-   DATABASE_URL: console → Realtime Database (include https://).
+   DATABASE_URL: console → Realtime Database. Either form works — the sketch
+                 strips any scheme/trailing slash (FirebaseClient wants the
+                 bare host). Regional DBs look like
+                 <project>-default-rtdb.<region>.firebasedatabase.app.
    PROJECT_ID:   the plain project id, e.g. "hems-web-1a2b3".              */
 #define FIREBASE_API_KEY     "YOUR_WEB_API_KEY"
-#define FIREBASE_DATABASE_URL "https://YOUR_PROJECT-default-rtdb.firebaseio.com/"
+#define FIREBASE_DATABASE_URL "YOUR_PROJECT-default-rtdb.YOUR_REGION.firebasedatabase.app"
 #define FIREBASE_PROJECT_ID  "YOUR_PROJECT_ID"
 
 /* ── Device account (created by scripts/seed.mjs — role claim: "device").

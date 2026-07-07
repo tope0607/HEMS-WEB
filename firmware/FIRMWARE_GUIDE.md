@@ -148,6 +148,7 @@ top of this — budget it from the port task's parity report.
 | Symptom | Likely cause |
 |---|---|
 | `[fb] auth error 400` | wrong API key, or email/password auth not enabled |
+| Auth OK but `[fb] live error 400` (writes fail, login works) | `FIREBASE_DATABASE_URL` malformed for FirebaseClient, which wants the bare host. The sketch now strips any `https://` and trailing `/` automatically, but if you're on an older build, set it to just `<project>-default-rtdb.<region>.firebasedatabase.app` — no scheme, no trailing slash. (Auth is unaffected because it hits a fixed Google endpoint, not this URL — which is why login succeeds while every RTDB op 400s.) |
 | PERMISSION_DENIED on writes | device account missing the `role: device` claim — re-run the seed script, then power-cycle (forces re-auth) |
 | NaN on one phase | that PZEM's wiring (TX/RX swapped) or no mains on its voltage terminals |
 | Stream connects, no commands | admin write blocked by rules (check the web console), or `/control/contactor` path typo |

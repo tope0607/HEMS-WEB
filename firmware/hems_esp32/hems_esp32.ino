@@ -145,6 +145,21 @@ HemsNilm nilm;
 
 /* ═══ Small helpers ═════════════════════════════════════════════════════ */
 
+/* FirebaseClient's Database.url() wants the BARE host — no scheme, no
+   trailing slash (per the library docs: Database.url("x.firebasedatabase.
+   app")). A stray "https://" or trailing "/" builds a malformed request
+   path and every RTDB op fails with HTTP 400 (auth still works, because
+   auth hits a fixed Google endpoint, not this URL). Normalise whatever the
+   user put in config.h so either form works. */
+static String normalizedDbUrl() {
+  String u = FIREBASE_DATABASE_URL;
+  u.trim();
+  if (u.startsWith("https://")) u.remove(0, 8);
+  else if (u.startsWith("http://")) u.remove(0, 7);
+  while (u.endsWith("/")) u.remove(u.length() - 1);
+  return u;
+}
+
 static bool timeReady() { return time(nullptr) > 1700000000; } // sanity: past 2023
 static int64_t epochMs() { return (int64_t)time(nullptr) * 1000LL; }
 
@@ -405,7 +420,7 @@ void setup() {
 
   initializeApp(clientWrite, fbApp, getAuth(deviceAuth), fbCallback, "auth");
   fbApp.getApp<RealtimeDatabase>(Database);
-  Database.url(FIREBASE_DATABASE_URL);
+  Database.url(normalizedDbUrl());   // bare host — see normalizedDbUrl()
   fbApp.getApp<Firestore::Documents>(Docs);
 
   // Restrict the SSE stream to the event types we act on.
