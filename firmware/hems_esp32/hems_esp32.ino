@@ -37,6 +37,27 @@
 #define DEBUG_PZEM 1
 #endif
 
+/* ── DS3231 real-time clock (optional) ──────────────────────────────────────
+   The device gets time from NTP over WiFi; the DS3231 keeps accurate time
+   when WiFi/NTP is unavailable so history/event timestamps stay correct
+   offline. Install "RTClib" (Adafruit) via Library Manager. The RTC is I2C:
+   wire SDA→GPIO21, SCL→GPIO22, VCC→3V3, GND→GND (override below if needed).
+   The sketch still compiles and runs on NTP alone if RTClib isn't installed. */
+#if __has_include(<RTClib.h>)
+  #include <Wire.h>
+  #include <RTClib.h>
+  #define HAS_RTC 1
+#else
+  #define HAS_RTC 0
+  #warning "RTClib not installed - DS3231 disabled, using NTP time only"
+#endif
+#ifndef RTC_SDA
+#define RTC_SDA 21
+#endif
+#ifndef RTC_SCL
+#define RTC_SCL 22
+#endif
+
 /* PZEM-3 rides EspSoftwareSerial. PZEM004Tv30's SoftwareSerial/Stream
    constructors only exist when PZEM004_SOFTSERIAL is defined — and the
    library auto-enables that only for AVR/ESP8266, never ESP32. A #define
@@ -144,11 +165,16 @@ static uint16_t accN = 0;
 static float kwhBaseline = 0;
 static uint32_t baselineDay = 0; // YYYYMMDD local
 
-static uint32_t tSample = 0, tLive = 0, tHistory = 0, tHeap = 0;
+static uint32_t tSample = 0, tLive = 0, tHistory = 0, tHeap = 0, tRtc = 0;
 static uint32_t lastHighLoadEventMs = 0;
 
 #if HAS_NILM
 HemsNilm nilm;
+#endif
+
+#if HAS_RTC
+RTC_DS3231 rtc;
+static bool rtcOk = false;   // true once the DS3231 answers on I2C
 #endif
 
 /* ═══ Small helpers ═════════════════════════════════════════════════════ */
@@ -170,6 +196,46 @@ static String normalizedDbUrl() {
 
 static bool timeReady() { return time(nullptr) > 1700000000; } // sanity: past 2023
 static int64_t epochMs() { return (int64_t)time(nullptr) * 1000LL; }
+
+/* ── DS3231 helpers ───────────────────────────────────────────────────────
+   The RTC stores UTC (Unix epoch); TZ_OFFSET_SECONDS is applied by
+   localtime() for display, so everything on the RTC stays UTC. */
+#if HAS_RTC
+static void setSystemClock(uint32_t epoch) {
+  struct timeval tv = { (time_t)epoch, 0 };
+  settimeofday(&tv, nullptr);
+}
+
+/* Boot: bring the DS3231 up and seed the system clock from it, so time is
+   valid IMMEDIATELY — even with no WiFi/NTP yet. */
+static void rtcBegin() {
+  Wire.begin(RTC_SDA, RTC_SCL);
+  rtcOk = rtc.begin(&Wire);
+  if (!rtcOk) {
+    Serial.println("[rtc] DS3231 not found on I2C - using NTP only");
+    return;
+  }
+  if (rtc.lostPower()) {
+    Serial.println("[rtc] DS3231 lost power (unset) - will set it once NTP syncs");
+  } else {
+    setSystemClock(rtc.now().unixtime());
+    Serial.printf("[rtc] system clock seeded from DS3231 (epoch %lu)\n",
+                  (unsigned long)rtc.now().unixtime());
+  }
+}
+
+/* Whenever NTP has an accurate time, write it back to the DS3231 so the RTC
+   never drifts. Runs on a slow timer from loop(). */
+static void rtcSyncFromNtp() {
+  if (!rtcOk || !timeReady()) return;
+  const uint32_t sys = (uint32_t)time(nullptr);
+  const long drift = (long)sys - (long)rtc.now().unixtime();
+  if (drift > 2 || drift < -2) {
+    rtc.adjust(DateTime(sys));
+    Serial.printf("[rtc] DS3231 synced from NTP (drift was %ld s)\n", drift);
+  }
+}
+#endif
 
 static uint32_t localDayStamp() {
   time_t now = time(nullptr);
@@ -417,6 +483,10 @@ void setup() {
   Serial2.begin(9600, SERIAL_8N1, PZEM2_RX, PZEM2_TX);
   pzem3Serial.begin(9600, SWSERIAL_8N1, PZEM3_RX, PZEM3_TX);
 
+#if HAS_RTC
+  rtcBegin();   // seed the system clock from the DS3231 (valid time offline)
+#endif
+
 #if HAS_NILM
   nilm.begin();   // model/config baked in via nilm_model.h at compile time
   Serial.printf("[nilm] engine ready: %d classes\n", HemsNilm::numClasses());
@@ -488,6 +558,13 @@ void loop() {
     publishHistory();
   }
 
+#if HAS_RTC
+  if (now - tRtc >= 60000UL) {   // keep the DS3231 aligned with NTP
+    tRtc = now;
+    rtcSyncFromNtp();
+  }
+#endif
+
   if (now - tHeap >= HEAP_LOG_INTERVAL_MS) {
     tHeap = now;
     /* TLS ×2 + Firebase + UART buffers + NILM is a real RAM load — watch it.
@@ -495,5 +572,13 @@ void loop() {
        anything trending below ~60 kB (see FIRMWARE_GUIDE.md). */
     Serial.printf("[heap] free=%u minFree=%u\n",
                   ESP.getFreeHeap(), ESP.getMinFreeHeap());
+#if HAS_RTC
+    if (rtcOk) {
+      DateTime t = rtc.now();
+      Serial.printf("[rtc] %04d-%02d-%02d %02d:%02d:%02d UTC  temp=%.1fC\n",
+                    t.year(), t.month(), t.day(), t.hour(), t.minute(), t.second(),
+                    rtc.getTemperature());
+    }
+#endif
   }
 }

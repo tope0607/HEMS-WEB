@@ -27,6 +27,7 @@ needed beyond keeping the file where it is.
 | **FirebaseClient** | Mobizt | ≥ 1.4.x | Auth, RTDB (SSE stream), Firestore |
 | **PZEM004Tv30** | Jakub Mandula | ≥ 1.1.2 | PZEM-004T v3.0 Modbus reads |
 | **EspSoftwareSerial** | Dirk Kaar | ≥ 8.1 | 3rd PZEM port |
+| **RTClib** | Adafruit | ≥ 2.1 | DS3231 real-time clock (optional — NTP fallback) |
 | **hems_nilm_cpp** | this repo: `firmware/libraries/hems_nilm_cpp` | 1.0.0 | on-device appliance detection |
 
 `hems_nilm_cpp` is a **local library that lives in this repository** — the
@@ -62,7 +63,16 @@ PZEM board revision).
 | PZEM-3 TX → | **GPIO 18** (RX) | EspSoftwareSerial @9600 — fine at this baud |
 | PZEM-3 RX ← | **GPIO 19** (TX) | |
 | Contactor driver | **GPIO 25** | via opto/transistor relay module → contactor coil |
+| DS3231 SDA | **GPIO 21** | I2C data (optional RTC) |
+| DS3231 SCL | **GPIO 22** | I2C clock; RTC VCC→3V3, GND→GND |
 | UART0 (USB) | GPIO 1/3 | keep free for flashing + Serial monitor |
+
+The **DS3231 is optional** — it keeps accurate time when WiFi/NTP is
+unavailable so offline history/event timestamps stay correct. On boot the
+firmware seeds the system clock from it (time valid immediately, even with
+no network); whenever NTP is reachable it writes the accurate time back to
+the RTC so it never drifts. Without RTClib installed the sketch still
+compiles and runs on NTP alone.
 
 Why these pins: they avoid the boot-strap pins (0, 2, 5, 12, 15), the
 SPI-flash pins (6–11), and the input-only pins (34–39). GPIO 25 idles LOW at
