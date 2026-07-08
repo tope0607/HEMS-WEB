@@ -29,6 +29,14 @@
 
 #include "config.h"
 
+/* Bench bring-up: 1 → print each phase's raw PZEM read (v/i/p + ok flag)
+   every second. ok=0 means the PZEM didn't respond (NaN); ok=1 with v≈230
+   means it's alive. Set to 0 once sensing is confirmed. Defined here (not
+   config.h) so it doesn't collide with your local credentials file. */
+#ifndef DEBUG_PZEM
+#define DEBUG_PZEM 1
+#endif
+
 /* PZEM-3 rides EspSoftwareSerial. PZEM004Tv30's SoftwareSerial/Stream
    constructors only exist when PZEM004_SOFTSERIAL is defined — and the
    library auto-enables that only for AVR/ESP8266, never ESP32. A #define
@@ -329,6 +337,15 @@ static void sampleCycle() {
   ph1 = readPzem(pzem1);
   ph2 = readPzem(pzem2);
   ph3 = readPzem(pzem3);
+
+#if DEBUG_PZEM
+  /* Bench bring-up: print each phase's raw read. ok=0 means the PZEM did
+     NOT respond (NaN) — a comms/power-terminal problem; ok=1 with v≈230
+     means it's alive (p rises when a load draws current). Set DEBUG_PZEM 0
+     in config.h once sensing is confirmed. */
+  Serial.printf("[pzem] L1 ok=%d v=%.1f i=%.2f p=%.1f | L2 ok=%d v=%.1f | L3 ok=%d v=%.1f\n",
+                ph1.ok, ph1.v, ph1.i, ph1.p, ph2.ok, ph2.v, ph3.ok, ph3.v);
+#endif
 
   totalP = ph1.p + ph2.p + ph3.p;
   totalQ = (float)(reactivePower(ph1) + reactivePower(ph2) + reactivePower(ph3));
