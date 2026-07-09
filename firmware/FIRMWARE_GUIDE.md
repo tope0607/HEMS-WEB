@@ -91,12 +91,17 @@ seed script — the only identity whose token carries `role: "device"`, which is
 what the security rules check for `/live`, `history/`, `events/` writes.
 
 1. Run the seed script (see repo root README / `scripts/seed.mjs`).
-2. In `config.h` fill in:
+2. **Create your `config.h` from the template** (do this once): copy
+   `firmware/hems_esp32/config.example.h` to `firmware/hems_esp32/config.h`.
+   `config.h` is **gitignored** — it holds your WiFi + device passwords and
+   must never be committed. `config.example.h` is the tracked, placeholder-only
+   template.
+3. In your `config.h` fill in:
    - `FIREBASE_API_KEY` — console → Project settings → General → Web API key
    - `FIREBASE_DATABASE_URL` — console → Realtime Database URL
    - `FIREBASE_PROJECT_ID` — the plain project id
    - `DEVICE_EMAIL` / `DEVICE_PASSWORD` — whatever you seeded
-3. WiFi SSID/password, tariff, capacity, thresholds — same file.
+4. WiFi SSID/password, tariff, capacity, thresholds — same file.
 
 ## 5 · Bring-up sequence
 
