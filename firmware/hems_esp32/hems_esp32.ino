@@ -155,6 +155,12 @@ static bool highLoad = false;
 static int contactorState = 1;      // confirmed, reported in /live
 static int pendingControlState = -1; // set by the stream callback, applied in loop()
 
+/* Admin power schedule (mirrors RTDB /control/schedule). Enforced on-device
+   using local time (NTP + DS3231), so it holds with the web app closed. */
+static bool schedEnabled = false;
+static int schedOnH = 8, schedOnM = 0, schedOffH = 18, schedOffM = 0;
+static int lastSchedMinute = -1;    // minute-of-day we last evaluated (edge trigger)
+
 static char applianceLabel[48] = "Starting up";
 
 /* 60 s history accumulator (60 × 1 s samples) */
@@ -259,10 +265,30 @@ static void fbCallback(AsyncResult &res) {
   }
 }
 
-/* ═══ /control/contactor stream ═════════════════════════════════════════
-   Admin writes {state, requestedBy, requestedAt}; the rules guarantee only
-   admins can. We only need `state`; the payload schema is fixed, so a
-   minimal scan beats pulling in a JSON library. */
+/* Minimal JSON field scans for the fixed /control schema (avoids pulling in a
+   JSON parser). `key` must include the quotes, e.g. "\"onHour\"". */
+static long jsonLongAfter(const String &s, const char *key, long fallback) {
+  int k = s.indexOf(key);
+  if (k < 0) return fallback;
+  int c = s.indexOf(':', k);
+  if (c < 0) return fallback;
+  return s.substring(c + 1).toInt();
+}
+static int jsonBoolAfter(const String &s, const char *key) { // -1 absent, else 0/1
+  int k = s.indexOf(key);
+  if (k < 0) return -1;
+  int c = s.indexOf(':', k);
+  if (c < 0) return -1;
+  int i = c + 1;
+  while (i < (int)s.length() && s[i] == ' ') i++;
+  return s.substring(i, i + 4) == "true" ? 1 : 0;
+}
+
+/* ═══ /control stream ═══════════════════════════════════════════════════
+   Streams the whole /control node so both children arrive on one SSE
+   connection: contactor {state,...} (admin manual command) and schedule
+   {enabled,onHour,...} (admin power schedule). The rules guarantee only
+   admins can write either. Payload schema is fixed → minimal key scans. */
 static void controlStreamCallback(AsyncResult &res) {
   if (res.isError()) {
     Serial.printf("[stream] error %d: %s\n", res.error().code(),
@@ -275,14 +301,28 @@ static void controlStreamCallback(AsyncResult &res) {
   if (!rtdb.isStream()) return;
 
   String payload = rtdb.to<String>();
-  int keyAt = payload.indexOf("\"state\"");
-  if (keyAt < 0) return;
-  int colonAt = payload.indexOf(':', keyAt);
-  if (colonAt < 0) return;
-  int value = payload.substring(colonAt + 1).toInt();
-  if (value == 0 || value == 1) {
-    pendingControlState = value; // applied on the main loop, not in callback
-    Serial.printf("[stream] contactor command: %d\n", value);
+
+  // manual contactor command
+  if (payload.indexOf("\"state\"") >= 0) {
+    long v = jsonLongAfter(payload, "\"state\"", -1);
+    if (v == 0 || v == 1) {
+      pendingControlState = (int)v; // applied on the main loop, not in callback
+      Serial.printf("[stream] contactor command: %ld\n", v);
+    }
+  }
+
+  // power schedule update
+  if (payload.indexOf("\"onHour\"") >= 0 || payload.indexOf("\"enabled\"") >= 0) {
+    int en = jsonBoolAfter(payload, "\"enabled\"");
+    if (en >= 0) schedEnabled = (en == 1);
+    schedOnH = (int)jsonLongAfter(payload, "\"onHour\"", schedOnH);
+    schedOnM = (int)jsonLongAfter(payload, "\"onMinute\"", schedOnM);
+    schedOffH = (int)jsonLongAfter(payload, "\"offHour\"", schedOffH);
+    schedOffM = (int)jsonLongAfter(payload, "\"offMinute\"", schedOffM);
+    lastSchedMinute = -1; // re-evaluate against the new schedule right away
+    Serial.printf("[stream] schedule %s: on %02d:%02d off %02d:%02d\n",
+                  schedEnabled ? "ENABLED" : "disabled",
+                  schedOnH, schedOnM, schedOffH, schedOffM);
   }
 }
 
@@ -333,6 +373,32 @@ static void publishLive() {
     (long long)epochMs());
 
   Database.set<object_t>(clientWrite, "/live", object_t(buf), fbCallback, "live");
+}
+
+/* ═══ Contactor actuation (manual + scheduled share one path) ═══════════ */
+
+static void applyContactor(int state, const char *reason) {
+  if (state == contactorState) return;
+  driveContactor(state);
+  contactorState = state;
+  prefs.putInt("contactor", contactorState);
+  Serial.printf("[contactor] %s -> %s\n", reason, state == 1 ? "ON" : "OFF");
+  publishLive(); // confirm immediately via /live/contactorState
+}
+
+/* Enforce the admin power schedule on-device using local time. Edge-triggered
+   once per minute so manual overrides between the on/off times still hold. */
+static void evaluateSchedule() {
+  if (!schedEnabled || !timeReady()) return;
+  time_t now = time(nullptr);
+  struct tm lt;
+  localtime_r(&now, &lt);
+  const int minuteOfDay = lt.tm_hour * 60 + lt.tm_min;
+  if (minuteOfDay == lastSchedMinute) return; // already handled this minute
+  lastSchedMinute = minuteOfDay;
+
+  if (minuteOfDay == schedOnH * 60 + schedOnM) applyContactor(1, "schedule");
+  else if (minuteOfDay == schedOffH * 60 + schedOffM) applyContactor(0, "schedule");
 }
 
 /* ═══ Firestore writes (downsampled — free-tier discipline) ═════════════ */
@@ -517,9 +583,10 @@ void setup() {
   Database.url(normalizedDbUrl());   // bare host — see normalizedDbUrl()
   fbApp.getApp<Firestore::Documents>(Docs);
 
-  // Restrict the SSE stream to the event types we act on.
+  // Stream the whole /control node so both contactor commands and schedule
+  // changes arrive on one SSE connection.
   clientStream.setSSEFilters("get,put,patch,keep-alive,cancel,auth_revoked");
-  Database.get(clientStream, "/control/contactor", controlStreamCallback,
+  Database.get(clientStream, "/control", controlStreamCallback,
                true /* SSE stream */, "controlStream");
 }
 
@@ -534,18 +601,13 @@ void loop() {
   if (pendingControlState >= 0) {
     const int target = pendingControlState;
     pendingControlState = -1;
-    if (target != contactorState) {
-      driveContactor(target);
-      contactorState = target;
-      prefs.putInt("contactor", contactorState);
-      Serial.printf("[contactor] switched %s\n", target == 1 ? "ON" : "OFF");
-      publishLive(); // immediate confirmation, don't wait for the next cycle
-    }
+    applyContactor(target, "manual");
   }
 
   if (now - tSample >= SAMPLE_INTERVAL_MS) {
     tSample = now;
-    sampleCycle(); // sensing + NILM keep running even with WiFi down
+    sampleCycle();     // sensing + NILM keep running even with WiFi down
+    evaluateSchedule(); // enforce the admin power schedule (once per minute)
   }
 
   if (now - tLive >= LIVE_PUBLISH_MS) {

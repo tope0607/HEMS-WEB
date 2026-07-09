@@ -27,6 +27,38 @@ export interface ControlState {
   requestedAt: number;
 }
 
+/** Mirror of RTDB /control/schedule — daily contactor on/off times, admin-only.
+ *  The ESP32 enforces this on-device using its own clock (NTP + DS3231), so it
+ *  works even with the web app closed. Times are local (device TZ), 24-hour. */
+export interface Schedule {
+  enabled: boolean;
+  onHour: number; // 0–23
+  onMinute: number; // 0–59
+  offHour: number; // 0–23
+  offMinute: number; // 0–59
+  requestedBy: string;
+  requestedAt: number;
+}
+
+export const DEFAULT_SCHEDULE: Schedule = {
+  enabled: false,
+  onHour: 8,
+  onMinute: 0,
+  offHour: 18,
+  offMinute: 0,
+  requestedBy: '',
+  requestedAt: 0,
+};
+
+/** "HH:MM" ⇄ Schedule field helpers for the time inputs. */
+export function hhmm(h: number, m: number): string {
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+export function parseHHMM(s: string): { h: number; m: number } {
+  const [h, m] = s.split(':').map((x) => parseInt(x, 10));
+  return { h: Number.isFinite(h) ? h : 0, m: Number.isFinite(m) ? m : 0 };
+}
+
 /** Firestore history/{autoId} — downsampled 60 s aggregate. */
 export interface HistoryPoint {
   id: string;

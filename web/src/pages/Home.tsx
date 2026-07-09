@@ -12,13 +12,15 @@ import { PowerAreaChart, RangeSelector } from '../components/PowerAreaChart';
 import { EventTimeline } from '../components/EventTimeline';
 import { HighLoadBanner } from '../components/HighLoadBanner';
 import { ContactorCard } from '../components/ContactorCard';
+import { ScheduleCard } from '../components/ScheduleCard';
 import { Pill } from '../components/Pill';
+import type { Schedule } from '../lib/types';
 
 const SPARK_LEN = 40;
 
 export function HomePage() {
   const { user } = useAuth();
-  const { live, control } = useLive();
+  const { live, control, schedule } = useLive();
 
   /* live sparkline ring buffer */
   const sparkRef = useRef<number[]>([]);
@@ -72,6 +74,15 @@ export function HomePage() {
       const src = await getDataSource();
       if (!user) throw new Error('not signed in');
       await src.requestContactor(state, user.uid);
+    },
+    [user]
+  );
+
+  const saveSchedule = useMemo(
+    () => async (next: Omit<Schedule, 'requestedBy' | 'requestedAt'>) => {
+      const src = await getDataSource();
+      if (!user) throw new Error('not signed in');
+      await src.setSchedule(next, user.uid);
     },
     [user]
   );
@@ -231,6 +242,7 @@ export function HomePage() {
       {user?.role === 'admin' && (
         <div className="col-4" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
           <ContactorCard live={live} control={control} onRequest={requestContactor} />
+          <ScheduleCard schedule={schedule} onSave={saveSchedule} />
         </div>
       )}
     </div>

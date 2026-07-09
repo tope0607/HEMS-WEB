@@ -170,6 +170,15 @@ async function seedRtdbShape() {
     requestedBy: 'seed',
     requestedAt: now,
   });
+  await rtdb.ref('control/schedule').set({
+    enabled: false,
+    onHour: 8,
+    onMinute: 0,
+    offHour: 18,
+    offMinute: 0,
+    requestedBy: 'seed',
+    requestedAt: now,
+  });
   console.log('  · wrote initial /live and /control shape');
 }
 

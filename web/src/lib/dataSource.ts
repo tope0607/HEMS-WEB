@@ -1,4 +1,4 @@
-import type { ControlState, EventItem, HistoryPoint, LiveData, RangeKey } from './types';
+import type { ControlState, EventItem, HistoryPoint, LiveData, RangeKey, Schedule } from './types';
 import { DEMO_MODE } from './config';
 
 /**
@@ -18,6 +18,9 @@ export interface DataSource {
   subscribeControl(cb: (control: ControlState | null) => void): () => void;
   /** Admin-only by security rules; rejects for other roles. */
   requestContactor(state: 0 | 1, uid: string): Promise<void>;
+  /** Daily contactor on/off schedule, enforced on-device. Admin-only write. */
+  subscribeSchedule(cb: (schedule: Schedule | null) => void): () => void;
+  setSchedule(schedule: Omit<Schedule, 'requestedBy' | 'requestedAt'>, uid: string): Promise<void>;
   fetchHistory(range: RangeKey): Promise<HistoryPoint[]>;
   fetchHistoryBetween(from: number, to: number): Promise<HistoryPoint[]>;
   /** Latest N events, newest first, kept live (low write volume ⇒ cheap). */

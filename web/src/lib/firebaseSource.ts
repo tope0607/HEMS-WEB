@@ -10,7 +10,7 @@ import {
   where,
 } from 'firebase/firestore';
 import type { DataSource } from './dataSource';
-import type { ControlState, EventItem, HistoryPoint, LiveData, RangeKey } from './types';
+import type { ControlState, EventItem, HistoryPoint, LiveData, RangeKey, Schedule } from './types';
 import { RANGE_MS } from './types';
 import { getFirebaseApp } from './firebase';
 
@@ -49,6 +49,26 @@ export class FirebaseSource implements DataSource {
     // Security rules enforce: admins only, requestedBy must equal caller uid.
     await set(ref(this.db, 'control/contactor'), {
       state,
+      requestedBy: uid,
+      requestedAt: Date.now(),
+    });
+  }
+
+  subscribeSchedule(cb: (schedule: Schedule | null) => void): () => void {
+    return onValue(
+      ref(this.db, 'control/schedule'),
+      (snap) => cb(snap.exists() ? (snap.val() as Schedule) : null),
+      () => cb(null)
+    );
+  }
+
+  async setSchedule(
+    schedule: Omit<Schedule, 'requestedBy' | 'requestedAt'>,
+    uid: string
+  ): Promise<void> {
+    // Security rules enforce: admins only, requestedBy must equal caller uid.
+    await set(ref(this.db, 'control/schedule'), {
+      ...schedule,
       requestedBy: uid,
       requestedAt: Date.now(),
     });

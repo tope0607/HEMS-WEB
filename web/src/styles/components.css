@@ -794,6 +794,88 @@
   flex-wrap: wrap;
 }
 
+/* ── power schedule (admin) ────────────────────────────────────────────── */
+
+.sched-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0 16px;
+}
+
+/* prominent toggle (image 9) */
+.switch {
+  position: relative;
+  width: 46px;
+  height: 27px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  border: 1px solid var(--hairline-strong);
+  flex: none;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: var(--ink-2);
+  transition: transform var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.switch.is-on {
+  background: var(--tint-green-bg);
+  border-color: var(--tint-green-fg);
+}
+
+.switch.is-on .switch-knob {
+  transform: translateX(19px);
+  background: var(--tint-green-fg);
+}
+
+.sched-times {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.sched-times[aria-disabled='true'] {
+  opacity: 0.5;
+}
+
+.sched-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.sched-field input[type='time'] {
+  height: 44px;
+  padding: 0 12px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sched-field input[type='time']:focus {
+  outline: none;
+  border-color: var(--blue);
+}
+
+.sched-field input[type='time']::-webkit-calendar-picker-indicator {
+  filter: opacity(0.5);
+  cursor: pointer;
+}
+
 /* ── login ─────────────────────────────────────────────────────────────── */
 
 .login-split {

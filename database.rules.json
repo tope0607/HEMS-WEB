@@ -29,6 +29,20 @@
         }
       },
 
+      "schedule": {
+        ".write": "auth != null && auth.token.role === 'admin'",
+        ".validate": "newData.hasChildren(['enabled', 'onHour', 'onMinute', 'offHour', 'offMinute', 'requestedBy', 'requestedAt'])",
+
+        "enabled": { ".validate": "newData.isBoolean()" },
+        "onHour": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 23" },
+        "onMinute": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 59" },
+        "offHour": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 23" },
+        "offMinute": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 59" },
+        "requestedBy": { ".validate": "newData.isString() && newData.val() === auth.uid" },
+        "requestedAt": { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
+      },
+
       "$other": {
         ".validate": false
       }

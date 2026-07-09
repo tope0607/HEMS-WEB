@@ -1,6 +1,6 @@
 import type { DataSource } from './dataSource';
-import type { ControlState, EventItem, HistoryPoint, LiveData, PhaseReading, RangeKey } from './types';
-import { RANGE_MS } from './types';
+import type { ControlState, EventItem, HistoryPoint, LiveData, PhaseReading, RangeKey, Schedule } from './types';
+import { DEFAULT_SCHEDULE, RANGE_MS } from './types';
 import { CAPACITY_W, HIGH_LOAD_FRACTION, TARIFF_NAIRA_PER_KWH } from './config';
 
 /**
@@ -200,12 +200,14 @@ export class DemoSource implements DataSource {
 
   private contactor: 0 | 1;
   private control: ControlState;
+  private schedule: Schedule;
   private kwhLostToday = 0;
   private offSinceKwh: number | null = null;
   private lostDay: number;
 
   private liveSubs = new Set<(l: LiveData | null) => void>();
   private controlSubs = new Set<(c: ControlState | null) => void>();
+  private scheduleSubs = new Set<(s: Schedule | null) => void>();
   private eventSubs = new Map<(e: EventItem[]) => void, number>();
   private timer: ReturnType<typeof setInterval> | null = null;
 
@@ -213,7 +215,18 @@ export class DemoSource implements DataSource {
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('hems-demo-contactor') : null;
     this.contactor = saved === '0' ? 0 : 1;
     this.control = { state: this.contactor, requestedBy: 'seed', requestedAt: Date.now() - 60_000 };
+    this.schedule = this.loadSchedule();
     this.lostDay = midnightOf(Date.now());
+  }
+
+  private loadSchedule(): Schedule {
+    try {
+      const raw = localStorage.getItem('hems-demo-schedule');
+      if (raw) return { ...DEFAULT_SCHEDULE, ...JSON.parse(raw) };
+    } catch {
+      /* private mode */
+    }
+    return { ...DEFAULT_SCHEDULE };
   }
 
   private snapshot(now = Date.now()): LiveData {
@@ -324,6 +337,25 @@ export class DemoSource implements DataSource {
       const snap = this.snapshot();
       this.liveSubs.forEach((cb) => cb(snap));
     }, 1400);
+  }
+
+  subscribeSchedule(cb: (s: Schedule | null) => void): () => void {
+    this.scheduleSubs.add(cb);
+    cb(this.schedule);
+    return () => this.scheduleSubs.delete(cb);
+  }
+
+  async setSchedule(
+    schedule: Omit<Schedule, 'requestedBy' | 'requestedAt'>,
+    uid: string
+  ): Promise<void> {
+    this.schedule = { ...schedule, requestedBy: uid, requestedAt: Date.now() };
+    try {
+      localStorage.setItem('hems-demo-schedule', JSON.stringify(this.schedule));
+    } catch {
+      /* private mode */
+    }
+    this.scheduleSubs.forEach((cb) => cb(this.schedule));
   }
 
   async fetchHistory(range: RangeKey): Promise<HistoryPoint[]> {

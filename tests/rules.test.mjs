@@ -133,6 +133,44 @@ test('any signed-in account can READ /control; signed-out cannot', async () => {
   await assertFails(get(ref(rtdb(null), 'control/contactor')));
 });
 
+// ── /control/schedule ────────────────────────────────────────────────────────
+
+const schedule = (who) => ({
+  enabled: true,
+  onHour: 8,
+  onMinute: 30,
+  offHour: 18,
+  offMinute: 0,
+  requestedBy: who.uid,
+  requestedAt: Date.now(),
+});
+
+test('admin CAN write a well-formed schedule; user and device CANNOT', async () => {
+  await assertSucceeds(set(ref(rtdb(ADMIN), 'control/schedule'), schedule(ADMIN)));
+  await assertFails(set(ref(rtdb(USER), 'control/schedule'), schedule(USER)));
+  await assertFails(set(ref(rtdb(DEVICE), 'control/schedule'), schedule(DEVICE)));
+});
+
+test('schedule rejects out-of-range times, forged requestedBy, and extra keys', async () => {
+  await assertFails(
+    set(ref(rtdb(ADMIN), 'control/schedule'), { ...schedule(ADMIN), onHour: 24 })
+  );
+  await assertFails(
+    set(ref(rtdb(ADMIN), 'control/schedule'), { ...schedule(ADMIN), offMinute: 60 })
+  );
+  await assertFails(
+    set(ref(rtdb(ADMIN), 'control/schedule'), { ...schedule(ADMIN), requestedBy: 'someone-else' })
+  );
+  await assertFails(
+    set(ref(rtdb(ADMIN), 'control/schedule'), { ...schedule(ADMIN), extra: 'nope' })
+  );
+});
+
+test('any signed-in account can READ the schedule; signed-out cannot', async () => {
+  await assertSucceeds(get(ref(rtdb(USER), 'control/schedule')));
+  await assertFails(get(ref(rtdb(null), 'control/schedule')));
+});
+
 // ── /live ───────────────────────────────────────────────────────────────────
 
 test('device CAN overwrite /live; user and admin CANNOT', async () => {
