@@ -1,8 +1,8 @@
 {
-  "_comment": "Single source of truth. The simulator uses 'appliances' to synthesise data; the engine uses the same specs (via phase grouping) to restrict per-phase candidates. Replace appliance behaviour with real characterisation data once hardware is available.",
+  "_comment": "Real bench appliances (from Appliances.docx), distributed across 3 phases. The engine restricts each phase's classifier to the appliances assigned to it here, which is what separates electrically-identical loads (e.g. the 2000 W electric iron on A vs the 2000 W kettle on B). p_w/pf/behavior drive the simulator only; real training uses your captured characterization CSV. Signature is phase-independent, so characterise each appliance once (on any phase) — the 'phase' below only routes which phase considers it at inference.",
 
   "phases": ["A", "B", "C"],
-  "voltage_nominal": 240.0,
+  "voltage_nominal": 230.0,
   "frequency": 50,
   "sample_period_s": 1.0,
 
@@ -18,29 +18,22 @@
   },
 
   "attribution": {
-    "quiescent_baseline_w": 45.0,
+    "quiescent_baseline_w": 30.0,
     "over_attribution_tol_w": 90.0
   },
 
-  "background_w": { "A": 30.0, "B": 25.0, "C": 35.0 },
+  "background_w": { "A": 15.0, "B": 15.0, "C": 15.0 },
 
   "appliances": {
-    "AC_HOD":          { "phase": "A", "p_w": 1100, "pf": 0.85, "behavior": { "type": "cycling",   "on_s": 540, "off_s": 360, "window": [0.05, 0.95] } },
-    "Fridge_HOD":      { "phase": "A", "p_w": 120,  "pf": 0.60, "behavior": { "type": "cycling",   "on_s": 600, "off_s": 900, "window": [0.0, 1.0] } },
-    "Fan_HOD":         { "phase": "A", "p_w": 65,   "pf": 0.60, "behavior": { "type": "scheduled", "window": [0.08, 0.92] } },
+    "Electric_iron":  { "phase": "A", "p_w": 2000, "pf": 0.99, "behavior": { "type": "scheduled", "window": [0.15, 0.85] } },
+    "Photocopier":    { "phase": "A", "p_w": 1500, "pf": 0.92, "behavior": { "type": "burst", "n": 5, "dur_s": [20, 60], "window": [0.15, 0.85] } },
+    "Soldering_iron": { "phase": "A", "p_w": 60,   "pf": 0.98, "behavior": { "type": "scheduled", "window": [0.10, 0.90] } },
 
-    "Desktop_HOD":     { "phase": "B", "p_w": 150,  "pf": 0.95, "behavior": { "type": "scheduled", "window": [0.10, 0.85] } },
-    "Fan_Admin2":      { "phase": "B", "p_w": 60,   "pf": 0.60, "behavior": { "type": "scheduled", "window": [0.10, 0.90] } },
-    "Fan_SR":          { "phase": "B", "p_w": 55,   "pf": 0.60, "behavior": { "type": "scheduled", "window": [0.12, 0.88] } },
+    "Electric_kettle": { "phase": "B", "p_w": 2000, "pf": 0.99, "behavior": { "type": "burst", "n": 6, "dur_s": [30, 90], "window": [0.15, 0.85] } },
+    "Printer":         { "phase": "B", "p_w": 600,  "pf": 0.90, "behavior": { "type": "burst", "n": 7, "dur_s": [15, 50], "window": [0.15, 0.85] } },
+    "Laptop_charger":  { "phase": "B", "p_w": 65,   "pf": 0.55, "behavior": { "type": "scheduled", "window": [0.08, 0.92] } },
 
-    "Desktop_Admin":   { "phase": "C", "p_w": 160,  "pf": 0.95, "behavior": { "type": "scheduled", "window": [0.10, 0.85] } },
-    "Fan_Admin1":      { "phase": "C", "p_w": 60,   "pf": 0.60, "behavior": { "type": "scheduled", "window": [0.10, 0.90] } },
-    "Printer_Admin":   { "phase": "C", "p_w": 600,  "pf": 0.90, "behavior": { "type": "burst",     "n": 7,  "dur_s": [15, 50], "window": [0.15, 0.85] } },
-    "Photocopier_Admin": { "phase": "C", "p_w": 1000, "pf": 0.90, "behavior": { "type": "burst",   "n": 5,  "dur_s": [20, 60], "window": [0.15, 0.85] } }
-  },
-
-  "_untrained_loads_comment": "These are simulated but deliberately NOT in the training library, to test the rejection threshold (should be reported as 'unknown', not misclassified).",
-  "untrained_loads": {
-    "Visitor_Kettle": { "phase": "B", "p_w": 2000, "pf": 1.0, "behavior": { "type": "burst", "n": 3, "dur_s": [40, 90], "window": [0.2, 0.8] } }
+    "Incandescent_bulb": { "phase": "C", "p_w": 100, "pf": 1.0,  "behavior": { "type": "scheduled", "window": [0.10, 0.90] } },
+    "LED_bulb":          { "phase": "C", "p_w": 50,  "pf": 0.90, "behavior": { "type": "scheduled", "window": [0.10, 0.90] } }
   }
 }
