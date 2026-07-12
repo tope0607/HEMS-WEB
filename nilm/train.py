@@ -23,6 +23,19 @@ def main(csv_path="characterization.csv", out="model.json"):
             feats.append([abs(float(r["dP"])), abs(float(r["dQ"]))])
             labels.append(r["label"])
 
+    unknown = set(labels) - set(cfg["appliances"])
+    if unknown:
+        sys.exit(
+            "%s contains labels that are NOT in config.json's appliances:\n"
+            "    %s\n"
+            "Your CSV and appliance list disagree — most likely the CSV is stale\n"
+            "simulator data from an older config. Fix by either:\n"
+            "  * training on your real captured CSV (tools/capture_serial.py), or\n"
+            "  * regenerating simulator data for the CURRENT config:\n"
+            "        python simulator.py characterize\n"
+            % (csv_path, ", ".join(sorted(unknown)))
+        )
+
     clf = KNNClassifier(k=cfg["classifier"]["k"], tau=cfg["classifier"]["tau"])
     clf.fit(feats, labels)
 
