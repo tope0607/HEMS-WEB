@@ -60,8 +60,8 @@ PZEM board revision).
 | PZEM-1 RX ← | **GPIO 27** (TX) | |
 | PZEM-2 TX → | **GPIO 16** (RX) | UART2 |
 | PZEM-2 RX ← | **GPIO 17** (TX) | |
-| PZEM-3 TX → | **GPIO 18** (RX) | EspSoftwareSerial @9600 — fine at this baud |
-| PZEM-3 RX ← | **GPIO 19** (TX) | |
+| PZEM-3 TX → | **GPIO 14** (RX) | EspSoftwareSerial @9600 — avoid 32/33 (32 kHz crystal on some boards) |
+| PZEM-3 RX ← | **GPIO 13** (TX) | |
 | Contactor driver | **GPIO 25** | via opto/transistor relay module → contactor coil |
 | DS3231 SDA | **GPIO 21** | I2C data (optional RTC) |
 | DS3231 SCL | **GPIO 22** | I2C clock; RTC VCC→3V3, GND→GND |

@@ -55,8 +55,8 @@
 #define PZEM1_TX 27
 #define PZEM2_RX 16   // UART2 default-ish pins
 #define PZEM2_TX 17
-#define PZEM3_RX 18   // EspSoftwareSerial
-#define PZEM3_TX 19
+#define PZEM3_RX 14   // EspSoftwareSerial (avoid 32/33 — crystal-tied on some boards)
+#define PZEM3_TX 13
 
 #define CONTACTOR_PIN          25
 #define CONTACTOR_ACTIVE_HIGH  1   // 1: HIGH energises the relay coil driver
