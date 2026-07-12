@@ -29,8 +29,7 @@ nilm/day_stream.csv
 nilm/ground_truth.json
 nilm/model.json
 nilm/reference.json
-nilm/__pycache__/
-nilm/nilm/__pycache__/
+__pycache__/
 
 # Firmware secrets — real config.h is per-user; copy config.example.h to config.h
 firmware/hems_esp32/config.h

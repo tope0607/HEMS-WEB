@@ -59,11 +59,20 @@ the data source changes:
    for the metal DB). It publishes 1 Hz JSON to `hems/samples`.
 2. Run a broker (e.g. `mosquitto`), then `python run.py --mqtt <broker-host>`.
 3. **Characterisation:** instead of `simulator.py characterize`, record real
-   deltas — toggle each appliance in isolation on one PZEM and log the (label,
-   ΔP, ΔQ) of each on/off into a CSV with the same columns, then `python
-   train.py your_characterization.csv`. The appliance signature is independent
-   of phase, so characterise each type **once**; the per-phase appliance lists
-   in `config.json` route which loads each phase's pipeline considers.
+   deltas — toggle each appliance in isolation and capture the (label, ΔP, ΔQ)
+   of each on/off into a CSV, then `python train.py your_characterization.csv`.
+   Two ways to capture, both producing the same `label,dP,dQ` columns:
+   - **Live (recommended):** `python tools/capture_serial.py <Label> --port COMx`
+     reads the ESP32's serial port directly and appends a row the instant the
+     firmware prints each `[nilm]` event, with on-screen feedback so you see
+     every toggle land. Close the Arduino Serial Monitor first (one program per
+     port); find the port with `--list`.
+   - **From a saved log:** capture the Serial Monitor to a file, then
+     `python tools/log_to_csv.py <Label> serial.log >> your_characterization.csv`.
+
+   The appliance signature is independent of phase, so characterise each type
+   **once**; the per-phase appliance lists in `config.json` route which loads
+   each phase's pipeline considers.
 
 ## Two things to set with your data
 
