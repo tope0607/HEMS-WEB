@@ -29,6 +29,23 @@
 
 #include "config.h"
 
+/* Overload auto-trip defaults — provided here via #ifndef so a config.h that
+   predates this feature still compiles. Override in config.h. Default OFF. */
+#ifndef OVERLOAD_TRIP_ENABLED
+#define OVERLOAD_TRIP_ENABLED 0
+#endif
+#ifndef OVERLOAD_TRIP_W
+#define OVERLOAD_TRIP_W 10800.0f
+#endif
+#ifndef OVERLOAD_TRIP_DEBOUNCE_MS
+#define OVERLOAD_TRIP_DEBOUNCE_MS 5000UL
+#endif
+
+/* Evaluation harness (Objective 4). Inert unless built with TEST_MODE=1;
+   production builds compile every hook below to nothing. See
+   evaluation/README.md. Included early so fbCallback() can log write results. */
+#include "hems_test.h"
+
 /* Bench bring-up: 1 → print each phase's raw PZEM read (v/i/p + ok flag)
    every second. ok=0 means the PZEM didn't respond (NaN); ok=1 with v≈230
    means it's alive. Set to 0 once sensing is confirmed. Defined here (not
@@ -161,6 +178,14 @@ static bool schedEnabled = false;
 static int schedOnH = 8, schedOnM = 0, schedOffH = 18, schedOffM = 0;
 static int lastSchedMinute = -1;    // minute-of-day we last evaluated (edge trigger)
 
+/* Autonomous overload protection (config-driven, default OFF). Sustained load
+   above the trip threshold cuts the contactor. The test harness can lower the
+   threshold at runtime (ALRTTEST) to verify this at bench-safe wattage. */
+static bool overloadTripEnabled = OVERLOAD_TRIP_ENABLED;
+static float overloadTripW = OVERLOAD_TRIP_W;
+static uint32_t overloadAboveSinceMs = 0;
+static bool overloadCrossed = false;
+
 static char applianceLabel[48] = "Starting up";
 
 /* 60 s history accumulator (60 × 1 s samples) */
@@ -263,6 +288,11 @@ static void fbCallback(AsyncResult &res) {
   } else if (res.isDebug()) {
     // Serial.printf("[fb-debug] %s\n", res.debug().c_str());
   }
+  /* harness: log every write's success/fail (comms reliability) and, for
+     appliance-event writes, the confirm half of the latency pair. A result
+     is "complete" once it's no longer available/processing. No-op in prod. */
+  if (res.isError() || res.available())
+    testWriteResult(res.uid().c_str(), !res.isError());
 }
 
 /* Minimal JSON field scans for the fixed /control schema (avoids pulling in a
@@ -372,6 +402,7 @@ static void publishLive() {
     highLoad ? "true" : "false",
     (long long)epochMs());
 
+  testCommsAttempt("live");   // harness: comms reliability (no-op in prod)
   Database.set<object_t>(clientWrite, "/live", object_t(buf), fbCallback, "live");
 }
 
@@ -401,6 +432,35 @@ static void evaluateSchedule() {
   else if (minuteOfDay == schedOffH * 60 + schedOffM) applyContactor(0, "schedule");
 }
 
+/* Autonomous overload protection. Independent of, and stricter than, the
+   high-load alert: when armed and total load stays above the trip threshold
+   for OVERLOAD_TRIP_DEBOUNCE_MS, the contactor is cut. Default disabled
+   (config OVERLOAD_TRIP_ENABLED 0). The harness lowers the threshold via the
+   ALRTTEST command to verify the debounce→trip logic at bench-safe wattage;
+   the #ALRT markers (cross/alert/trip) time the escalation for analysis. */
+static void evaluateOverloadTrip(float total) {
+  const bool en = overloadTripEnabled || testOverloadEnabled();
+  const float thr = testOverloadEnabled() ? testOverloadThreshW() : overloadTripW;
+  if (!en) { overloadCrossed = false; overloadAboveSinceMs = 0; return; }
+
+  if (total >= thr) {
+    if (!overloadCrossed) {
+      overloadCrossed = true;
+      overloadAboveSinceMs = millis();
+      testAlrt("cross", total);
+      testAlrt("alert", total);            // alert raised immediately on the crossing
+    } else if (millis() - overloadAboveSinceMs >= OVERLOAD_TRIP_DEBOUNCE_MS) {
+      if (contactorState == 1) {
+        testAlrt("trip", total);
+        applyContactor(0, "overload");     // sustained overload → cut the building
+      }
+    }
+  } else {
+    overloadCrossed = false;
+    overloadAboveSinceMs = 0;
+  }
+}
+
 /* ═══ Firestore writes (downsampled — free-tier discipline) ═════════════ */
 
 static void publishHistory() {
@@ -420,6 +480,7 @@ static void publishHistory() {
   doc.add("costNaira", Values::Value(Values::DoubleValue(number_t(dailyKwh * TARIFF_NAIRA_PER_KWH, 2))));
   doc.add("phases", Values::Value(phases));
 
+  testCommsAttempt("history");   // harness: comms reliability (no-op in prod)
   Docs.createDocument(clientWrite, Firestore::Parent(FIREBASE_PROJECT_ID),
                       "history", DocumentMask(), doc, fbCallback, "history");
 
@@ -427,8 +488,11 @@ static void publishHistory() {
   accN = 0;
 }
 
+/* uid defaults to "event"; the NILM path passes a per-event "evt:<millis>" uid
+   in test mode so the completion callback can close the latency pair. */
 static void publishEvent(const char *type, const char *appliance,
-                         const char *onOff, float powerW) {
+                         const char *onOff, float powerW,
+                         const char *uid = "event") {
   if (!fbApp.ready() || !timeReady()) return;
 
   Document<Values::Value> doc("ts", Values::Value(Values::IntegerValue(epochMs())));
@@ -437,8 +501,9 @@ static void publishEvent(const char *type, const char *appliance,
   if (onOff) doc.add("event", Values::Value(Values::StringValue(onOff)));
   doc.add("powerW", Values::Value(Values::IntegerValue((int)roundf(powerW))));
 
+  testCommsAttempt(uid);   // harness: comms reliability (no-op in prod)
   Docs.createDocument(clientWrite, Firestore::Parent(FIREBASE_PROJECT_ID),
-                      "events", DocumentMask(), doc, fbCallback, "event");
+                      "events", DocumentMask(), doc, fbCallback, uid);
 }
 
 /* ═══ Daily kWh baseline ════════════════════════════════════════════════ */
@@ -479,6 +544,11 @@ static void sampleCycle() {
                 ph1.ok, ph1.v, ph1.i, ph1.p, ph2.ok, ph2.v, ph3.ok, ph3.v);
 #endif
 
+  /* harness: one tagged CSV telemetry row per phase (no-op in production) */
+  testEmitData("L1", ph1.v, ph1.i, ph1.p, ph1.energyKwh, ph1.pf);
+  testEmitData("L2", ph2.v, ph2.i, ph2.p, ph2.energyKwh, ph2.pf);
+  testEmitData("L3", ph3.v, ph3.i, ph3.p, ph3.energyKwh, ph3.pf);
+
   totalP = ph1.p + ph2.p + ph3.p;
   totalQ = (float)(reactivePower(ph1) + reactivePower(ph2) + reactivePower(ph3));
 
@@ -497,6 +567,9 @@ static void sampleCycle() {
     highLoad = false;
   }
 
+  /* autonomous overload protection (config-armed; harness can lower threshold) */
+  evaluateOverloadTrip(totalP);
+
 #if HAS_NILM
   /* Per-phase P and Q in the model's phase order (PZEM-1/2/3 → A/B/C).
      The engine owns detection, classification and attribution; events
@@ -508,16 +581,26 @@ static void sampleCycle() {
   nilm.processSample(tSec, p, q);
   HemsNilmEvent ev;
   while (nilm.popEvent(ev)) {
+    /* harness: stamp detection now and carry the id on the write uid so the
+       completion callback can close the latency pair. "event" in production. */
+    const char *euid = "event";
+#if TEST_MODE
+    static char euidbuf[24];
+    const uint32_t evId = millis();
+    snprintf(euidbuf, sizeof(euidbuf), "evt:%lu", (unsigned long)evId);
+    euid = euidbuf;
+    testEmitLatDetect(evId, ev.dP);
+#endif
     if (ev.classId >= 0) {
       snprintf(applianceLabel, sizeof(applianceLabel), "%s %s (%d%%)",
                ev.label, ev.on ? "ON" : "OFF",
                (int)lroundf(ev.confidence * 100.0f));
-      publishEvent("appliance", ev.label, ev.on ? "ON" : "OFF", totalP);
+      publishEvent("appliance", ev.label, ev.on ? "ON" : "OFF", totalP, euid);
     } else {
       /* rejected by tau: an untrained load — report honestly, don't guess */
       snprintf(applianceLabel, sizeof(applianceLabel), "Unknown load %s",
                ev.on ? "ON" : "OFF");
-      publishEvent("appliance", "unknown", ev.on ? "ON" : "OFF", totalP);
+      publishEvent("appliance", "unknown", ev.on ? "ON" : "OFF", totalP, euid);
     }
     Serial.printf("[nilm] %s dP=%+.0fW dQ=%+.0fVAR d=%.2f -> %s\n",
                   ev.on ? "ON " : "OFF", ev.dP, ev.dQ, ev.dist, applianceLabel);
@@ -535,6 +618,7 @@ static void sampleCycle() {
 void setup() {
   Serial.begin(115200);
   Serial.println("\nHEMS ESP32 boot");
+  testBegin();   // harness banner + #DATA CSV header (no-op in production)
 
   /* contactor first — restore last confirmed state before anything slow */
   prefs.begin("hems", false);
@@ -595,7 +679,29 @@ void loop() {
   // RealtimeDatabase/Firestore::Documents have no loop() of their own.
   fbApp.loop();
 
+  testPollSerial();   // harness: read LOAD/RELAYTEST/ALRTTEST/PWR commands (no-op in prod)
+
   const uint32_t now = millis();
+
+#if TEST_MODE
+  /* relay switching test: drive the contactor raw (no NVS/publish churn),
+     read state back from the largest phase current, restore afterwards. */
+  {
+    static bool rlyWas = false;
+    const float maxI = max(ph1.i, max(ph2.i, ph3.i));
+    const int cmd = testRelayCommand(now, maxI);
+    if (cmd >= 0) driveContactor(cmd);
+    const bool act = testRelayActive();
+    if (rlyWas && !act) driveContactor(contactorState);   // restore true state
+    rlyWas = act;
+  }
+  /* comms: mark Wi-Fi drop/restore transitions for the reconnect-time metric */
+  {
+    static bool wifiWas = true;
+    const bool wifiNow = (WiFi.status() == WL_CONNECTED);
+    if (wifiNow != wifiWas) { testWifi(wifiNow); wifiWas = wifiNow; }
+  }
+#endif
 
   /* admin command arrived on the stream → actuate → confirm via /live */
   if (pendingControlState >= 0) {

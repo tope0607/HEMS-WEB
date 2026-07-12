@@ -32,6 +32,19 @@
 #define HIGH_LOAD_W          9600.0f  // highLoad threshold (0.8 × capacity)
 #define HIGH_LOAD_CLEAR_W    9120.0f  // 5% hysteresis so the flag doesn't flap
 
+/* ── Overload auto-trip (autonomous protection, default OFF) ────────────────
+   Independent escalation ABOVE the high-load alert: if total load stays over
+   OVERLOAD_TRIP_W for OVERLOAD_TRIP_DEBOUNCE_MS, the contactor is cut
+   (reason "overload"). Default disabled — automatically cutting the building
+   is a deliberate choice; enable it and pick a threshold that suits the
+   installation. The evaluation harness (TEST_MODE) can lower the threshold at
+   runtime to verify the trip logic at bench-safe wattage without touching
+   this production value. These are optional — the sketch falls back to these
+   same defaults via #ifndef if your config.h predates them. */
+#define OVERLOAD_TRIP_ENABLED      0        // 1 = arm autonomous overload cutoff
+#define OVERLOAD_TRIP_W            10800.0f // trip threshold (0.9 × capacity, above the alert)
+#define OVERLOAD_TRIP_DEBOUNCE_MS  5000UL   // sustained overload before tripping
+
 /* Lagos is UTC+1, no DST. Daily kWh resets at local midnight. */
 #define TZ_OFFSET_SECONDS    3600L
 

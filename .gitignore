@@ -33,3 +33,10 @@ __pycache__/
 
 # Firmware secrets — real config.h is per-user; copy config.example.h to config.h
 firmware/hems_esp32/config.h
+
+# Evaluation harness: raw serial captures (may be large / site-specific) and
+# regenerated result artifacts. Keep the folder placeholders.
+evaluation/logs/*
+!evaluation/logs/.gitkeep
+evaluation/results/*
+!evaluation/results/.gitkeep
