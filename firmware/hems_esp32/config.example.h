@@ -71,8 +71,11 @@
 #define PZEM3_RX 14   // EspSoftwareSerial (avoid 32/33 — crystal-tied on some boards)
 #define PZEM3_TX 13
 
-#define CONTACTOR_PIN          25
-#define CONTACTOR_ACTIVE_HIGH  1   // 1: HIGH energises the relay coil driver
+// Relay IN pin. Must be a FREE GPIO — never share it with the RTC's I2C bus
+// (21 SDA / 22 SCL) or a PZEM UART, or the contactor won't switch. 23 and 25
+// are both safe (free, not strap pins, idle LOW at boot).
+#define CONTACTOR_PIN          23
+#define CONTACTOR_ACTIVE_HIGH  1   // 1: HIGH energises the relay; 0: LOW energises (active-low boards)
 
 /* ── NILM phase mapping ────────────────────────────────────────────────────
    nilm/config.json declares the phases in order (e.g. ["A","B","C"]) and
