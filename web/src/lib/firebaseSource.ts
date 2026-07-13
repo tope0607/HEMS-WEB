@@ -86,7 +86,10 @@ export class FirebaseSource implements DataSource {
         where('ts', '>=', from),
         where('ts', '<=', to),
         orderBy('ts', 'asc'),
-        qLimit(11000) // 7d of 60s docs ≈ 10 080 — hard ceiling for safety
+        // Firestore rejects any structured-query limit above 10000. 7d of 60s
+        // docs ≈ 10 080, so cap at the max; the ~80 oldest points dropped from a
+        // 7-day view are immaterial to the chart.
+        qLimit(10000)
       )
     );
     return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<HistoryPoint, 'id'>) }));
